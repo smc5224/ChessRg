@@ -1,25 +1,28 @@
 import cv2
 import numpy as np
 
-def detect_chessboard(image_path, board_size=(7, 7)):
-    # 이미지 로드
-    image = cv2.imread(image_path)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+# 이미지 로드 및 그레이스케일 변환
+image = cv2.imread('images1.jfif')
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # 체스판의 코너 찾기
-    ret, corners = cv2.findChessboardCorners(gray, board_size, None)
+edges = cv2.Canny(gray, 50, 150)
 
-    if ret:
-        # 체스판의 코너가 성공적으로 인식되었을 때
-        cv2.drawChessboardCorners(image, board_size, corners, ret)
-        print("체스판 코너가 인식되었습니다.")
-    else:
-        print("체스판 코너를 찾을 수 없습니다.")
-    
-    # 결과 출력xdxxxxdxx
-    cv2.imshow('Chessboard Detection', image)
+# 4. Adaptive Threshold - 조명 변화가 있는 경우에도 균일한 이진화를 위해 적용
+thresholded = cv2.adaptiveThreshold(edges, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                    cv2.THRESH_BINARY, 11, 2)
+
+# 코너 검출
+corners = cv2.goodFeaturesToTrack(gray, maxCorners=64, qualityLevel=0.02, minDistance=15, blockSize=7, useHarrisDetector=True, k=0.04)
+
+# 코너가 검출되었을 경우 시각화
+if corners is not None:
+    corners = np.int0(corners)  # 좌표를 정수로 변환
+    for i in corners:
+        x, y = i.ravel()
+        cv2.circle(image, (x, y), 5, (0, 0, 255), -1)  # 각 코너에 빨간색 원 그리기
+
+    cv2.imshow('Corners', image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-
-# 사용 예시
-detect_chessboard('chess.jfif')
+else:
+    print("코너를 찾을 수 없습니다.")
