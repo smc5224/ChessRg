@@ -145,15 +145,37 @@ def detect_moves(initial_image, new_image):
                 print(f"규칙오류 : {piece_B}가 {Bcell}에서 {Acell}로 이동할 수 없습니다.")
                 turn_count-=1
         else:
-            if is_valid_move(piece_A, Acell, Bcell) == True:
+            if turn_count % 2 != 0:
+                if board_state[Acell[0]][Acell[1]].startswith() == 'W':
+                    startCell = Acell
+                    start_piece = piece_A
+                    endCell = Bcell
+                    end_piece = piece_B
+                else:
+                    startCell = Bcell
+                    start_piece = piece_B
+                    endCell = Acell
+            else:
+                if board_state[Acell[0]][Acell[1]].startswith() == 'W':
+                    startCell = Bcell
+                    start_piece = piece_B
+                    endCell = Acell
+                    end_piece = piece_A
+                else:
+                    startCell = Acell
+                    start_piece = piece_A
+                    endCell = Bcell
+                    end_piece = piece_B
+
+            if is_valid_move(piece_A, startCell, endCell) == True:
                 # 두 위치 모두 기물이 있는 경우 (기물 잡기 상황)
                 if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
-                    print(f"백의 {piece_A}가 {Bcell}에서 흑의 {piece_B}를 잡았습니다.")
+                    print(f"백의 {start_piece}가 {endCell}에서 흑의 {end_piece}를 잡았습니다.")
                 else:  # 짝수 턴이면 흑이 백을 잡음
-                    print(f"흑의 {piece_A}가 {Bcell}에서 백의 {piece_B}를 잡았습니다.")
+                    print(f"흑의 {start_piece}가 {endCell}에서 백의 {end_piece}를 잡았습니다.")
                 
-                board_state[Bcell[0]][Bcell[1]] = piece_A  # B 위치로 A의 기물 이동
-                board_state[Acell[0]][Acell[1]] = None  # A 위치를 빈칸으로
+                board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
+                board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
             else :
 
                 if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
@@ -164,6 +186,12 @@ def detect_moves(initial_image, new_image):
                     turn_count-=1
         # 턴 수 증가
         turn_count += 1
+    elif len(moves) == 4:
+        white_king_side = {(4, 0), (6, 0), (7, 0), (5, 0)}
+        white_queen_side = {(4, 0), (2, 0), (0, 0), (3, 0)}
+        black_king_side = {(4, 7), (6, 7), (7, 7), (5, 7)}
+        black_queen_side = {(4, 7), (2, 7), (0, 7), (3, 7)}
+
     else:
         print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
 
@@ -300,19 +328,9 @@ def detect_moves_with_rules(initial_image, new_image):
         print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
 
 # 이미지 경로 설정
-image1 = 'ChessRg\c1.PNG'  # 업로드한 체스판 이미지 경로 사용
-image1 = detect_and_crop_chessboard(image1)
-image2 = 'ChessRg\c2.PNG'          # 두 번째 체스판 이미지 경로
-image2 = detect_and_crop_chessboard(image2)
-image3 = 'ChessRg\c3.PNG'  # 업로드한 체스판 이미지 경로 사용
-image3 = detect_and_crop_chessboard(image3)
-image4 = 'ChessRg\c4.PNG'          # 두 번째 체스판 이미지 경로
-image4 = detect_and_crop_chessboard(image4)
-image5 = 'ChessRg\c5.PNG'  # 업로드한 체스판 이미지 경로 사용
-image5 = detect_and_crop_chessboard(image5)
-
-# 이동 감지
-detect_moves(image1, image2)
-detect_moves(image2, image3)
-detect_moves(image3, image4)
-detect_moves(image4, image5)
+for i in range(9):
+    imageA = f'ChessRg\CLtest\{i+1}.PNG'  # 업로드한 체스판 이미지 경로 사용
+    imageA = detect_and_crop_chessboard(imageA)
+    imageB = f'ChessRg\CLtest\{i+2}.PNG'          # 두 번째 체스판 이미지 경로
+    imageB = detect_and_crop_chessboard(imageB)
+    detect_moves(imageA, imageB)
