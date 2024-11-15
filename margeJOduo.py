@@ -209,6 +209,34 @@ def detect_moves(initial_image, new_image):
             print("퀸 사이드 캐슬링이 감지되었습니다.")
             perform_castling("queen", move_set)
             return
+        
+    elif len(moves) == 3:
+        for i in range(3):
+            for j in range(i + 1, 3):
+                pos1, pos2 = moves[i], moves[j]
+                diffX = pos1[0] - pos2[0]
+                diffY = pos1[1] - pos2[1]
+                # 대각선 관계 확인
+                if abs(diffX) == 1 and abs(diffY) == 1:
+                    # 대각선 관계가 있는 경우 나머지 좌표를 target으로 설정
+                    target = moves[3 - i - j]  # 남은 하나의 인덱스
+                    turn_count += 1
+                    if turn_count % 2 != 0:
+                        if (diffX == -1 and diffY == 1):
+                            En_type = 'angLW'
+                        elif (diffX == -1 and diffY == -1):
+                            En_type = 'angRW'
+                    else:
+                        if (diffX == -1 and diffY == 1):
+                            En_type = 'angRB'
+                        elif (diffX == -1 and diffY == -1):
+                            En_type = 'angLB'
+        
+        
+
+        print(diffX, diffY)        
+        if En_type is not None:
+            perform_En_passant(En_type, target)
 
     else:
         print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
@@ -222,22 +250,99 @@ def perform_castling(castling_type, move_set):
             if is_valid_move("WK", (7,4), (7,2)):
                 board_state[7][4], board_state[7][2] = None, "WK"
                 board_state[7][0], board_state[7][3] = None, "WR"
+                turn_count += 1  # 캐슬링 후 턴 증가
+            else: 
+                print("규칙오류 : 캐슬링이 불가능합니다.")
+                turn_count-=1
         elif (0, 4) in move_set:  # 블랙 퀸 사이드
             if is_valid_move("BK", (0,4), (0,2)):
                 board_state[0][4], board_state[0][2] = None, "BK"
                 board_state[0][0], board_state[0][3] = None, "BR"
+                turn_count += 1  # 캐슬링 후 턴 증가
+            else: 
+                print("규칙오류 : 캐슬링이 불가능합니다.")
+                turn_count-=1
     elif castling_type == "king":
         if (7, 4) in move_set:  # 화이트 킹 사이드
             if is_valid_move("WK", (7,4), (7,6)):
                 board_state[7][4], board_state[7][6] = None, "WK"
                 board_state[7][7], board_state[7][5] = None, "WR"
+                turn_count += 1  # 캐슬링 후 턴 증가
+            else: 
+                print("규칙오류 : 캐슬링이 불가능합니다.")
+                turn_count-=1
         elif (0, 4) in move_set:  # 블랙 킹 사이드
             if is_valid_move("BK", (0,4), (0,6)):
                 board_state[0][4], board_state[0][6] = None, "BK"
                 board_state[0][7], board_state[0][5] = None, "BR"
+                turn_count += 1  # 캐슬링 후 턴 증가
+            else: 
+                print("규칙오류 : 캐슬링이 불가능합니다.")
+                turn_count-=1
 
-    turn_count += 1  # 캐슬링 후 턴 증가
+    
     # 체스 기물 이동 규칙을 확인하는 함수
+
+def perform_En_passant(En_passant_type, En_passant_target):
+    """
+    앙파상을 수행하는 함수.
+    :param En_passant_type: 앙파상 타입 (angLW, angRW, angLB, angRB)
+                           - angLW: 백 폰이 오른쪽 대각선으로 이동하여 흑 폰을 잡음
+                           - angRW: 백 폰이 왼쪽 대각선으로 이동하여 흑 폰을 잡음
+                           - angLB: 흑 폰이 오른쪽 대각선으로 이동하여 백 폰을 잡음
+                           - angRB: 흑 폰이 왼쪽 대각선으로 이동하여 백 폰을 잡음
+    :param En_passant_target: 잡히는 상대 기물의 좌표 (row, col)
+    """
+    global board_state
+    global turn_count
+
+    target_row, target_col = En_passant_target
+
+    if En_passant_type == "angLW":  # 백 폰이 오른쪽 대각선으로 이동
+        # 백 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 위 칸
+        move_row, move_col = target_row - 1, target_col
+        if is_valid_move("WP", (target_row, target_col - 1), (move_row, move_col)):
+            # 백 폰 이동
+            board_state[target_row][target_col - 1] = None
+            board_state[move_row][move_col] = "WP"
+            # 흑 폰 제거
+            board_state[target_row][target_col] = None
+
+    elif En_passant_type == "angRW":  # 백 폰이 왼쪽 대각선으로 이동
+        # 백 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 위 칸
+        move_row, move_col = target_row - 1, target_col
+        if is_valid_move("WP", (target_row, target_col + 1), (move_row, move_col)):
+            # 백 폰 이동
+            board_state[target_row][target_col + 1] = None
+            board_state[move_row][move_col] = "WP"
+            # 흑 폰 제거
+            board_state[target_row][target_col] = None
+
+    elif En_passant_type == "angLB":  # 흑 폰이 오른쪽 대각선으로 이동
+        # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
+        move_row, move_col = target_row + 1, target_col
+        if is_valid_move("BP", (target_row, target_col - 1), (move_row, move_col)):
+            # 흑 폰 이동
+            board_state[target_row][target_col - 1] = None
+            board_state[move_row][move_col] = "BP"
+            # 백 폰 제거
+            board_state[target_row][target_col] = None
+
+    elif En_passant_type == "angRB":  # 흑 폰이 왼쪽 대각선으로 이동
+        # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
+        move_row, move_col = target_row + 1, target_col
+        if is_valid_move("BP", (target_row, target_col + 1), (move_row, move_col)):
+            # 흑 폰 이동
+            board_state[target_row][target_col + 1] = None
+            board_state[move_row][move_col] = "BP"
+            # 백 폰 제거
+            board_state[target_row][target_col] = None
+
+    else:
+        print("Invalid En Passant type!")
+
+    turn_count += 1  # 앙파상 후 턴 증가
+
 
 def is_valid_move(piece, start, end):
     """
@@ -266,7 +371,8 @@ def is_valid_move(piece, start, end):
                         (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
             else:  # 일반 이동
                 return ((row_diff == -1 and col_diff == 0 and board_state[end_row][end_col] is None) or
-                        (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
+                        (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
+                        (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row+1][end_col] is not None)) #앙파상 판별
 
         # 룩
         elif piece == 'WR':
@@ -317,7 +423,8 @@ def is_valid_move(piece, start, end):
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
             else:  # 일반 이동
                 return ((row_diff == 1 and col_diff == 0 and board_state[end_row][end_col] is None) or
-                        (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
+                        (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
+                        (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row-1][end_col] is not None)) #마지막줄 - 앙파상 판별
         # 룩
         elif piece == 'BR':
             if start[0]==7 and start[1]==0:
@@ -361,10 +468,10 @@ def is_valid_move(piece, start, end):
     return False
 
 # 이미지 경로 설정
-for i in range(9):
-    imageA = f'ChessRg\CLtest\{i+1}.PNG'  # 업로드한 체스판 이미지 경로 사용
+for i in range(5):
+    imageA = f'ChessRg\\angtest\{i+1}.PNG'  # 업로드한 체스판 이미지 경로 사용
     imageA = detect_and_crop_chessboard(imageA)
-    imageB = f'ChessRg\CLtest\{i+2}.PNG'          # 두 번째 체스판 이미지 경로
+    imageB = f'ChessRg\\angtest\{i+2}.PNG'          # 두 번째 체스판 이미지 경로
     imageB = detect_and_crop_chessboard(imageB)
     detect_moves(imageA, imageB)
     print(board_state)
