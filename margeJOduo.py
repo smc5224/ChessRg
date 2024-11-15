@@ -230,7 +230,6 @@ def detect_moves(initial_image, new_image):
                             En_type = 'angRB'
                         elif (diffX == -1 and diffY == -1):
                             En_type = 'angLB'
-                    turn_count += 1
 
         perform_En_passant(En_type, target)
 
@@ -283,10 +282,10 @@ def perform_En_passant(En_passant_type, En_passant_target):
     """
     앙파상을 수행하는 함수.
     :param En_passant_type: 앙파상 타입 (angLW, angRW, angLB, angRB)
-                           - angLW: 백 폰이 오른쪽 대각선으로 이동하여 흑 폰을 잡음
-                           - angRW: 백 폰이 왼쪽 대각선으로 이동하여 흑 폰을 잡음
-                           - angLB: 흑 폰이 오른쪽 대각선으로 이동하여 백 폰을 잡음
-                           - angRB: 흑 폰이 왼쪽 대각선으로 이동하여 백 폰을 잡음
+    - angLW: 백 폰이 오른쪽 대각선으로 이동하여 흑 폰을 잡음
+    - angRW: 백 폰이 왼쪽 대각선으로 이동하여 흑 폰을 잡음
+    - angLB: 흑 폰이 오른쪽 대각선으로 이동하여 백 폰을 잡음
+    - angRB: 흑 폰이 왼쪽 대각선으로 이동하여 백 폰을 잡음
     :param En_passant_target: 잡히는 상대 기물의 좌표 (row, col)
     """
     global board_state
@@ -464,10 +463,10 @@ def is_valid_move(piece, start, end):
     return False
 
 # 이미지 경로 설정
-for i in range(5):
-    imageA = f'ChessRg\\angtest\{i+1}.PNG'  # 업로드한 체스판 이미지 경로 사용
+for i in range(9):
+    imageA = f'ChessRg\CLtest\{i+1}.PNG'  # 업로드한 체스판 이미지 경로 사용
     imageA = detect_and_crop_chessboard(imageA)
-    imageB = f'ChessRg\\angtest\{i+2}.PNG'          # 두 번째 체스판 이미지 경로
+    imageB = f'ChessRg\CLtest\{i+2}.PNG'          # 두 번째 체스판 이미지 경로
     imageB = detect_and_crop_chessboard(imageB)
     detect_moves(imageA, imageB)
-    print(board_state)
+    print(turn_count)
