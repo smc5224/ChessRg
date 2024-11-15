@@ -209,6 +209,33 @@ def detect_moves(initial_image, new_image):
             print("퀸 사이드 캐슬링이 감지되었습니다.")
             perform_castling("queen", move_set)
             return
+        
+    elif len(moves) == 3:
+        for i in range(3):
+            for j in range(i + 1, 3):
+                pos1, pos2 = moves[i], moves[j]
+                diffX = pos1[0] - pos2[0]
+                diffY = pos1[1] - pos2[1]
+                # 대각선 관계 확인
+                if abs(diffX) == 1 and abs(diffY) == 1:
+                    # 대각선 관계가 있는 경우 나머지 좌표를 target으로 설정
+                    target = moves[3 - i - j]  # 남은 하나의 인덱스
+                    turn_count += 1
+                else:
+                    print(f"규칙오류 : 앙파상이 아닙니다.")
+                    turn_count -= 1
+                    
+        if turn_count % 2 != 0:
+            if (diffX == -1 and diffY == 1):
+                En_type = 'angLW'
+            elif (diffX == -1 and diffY == -1):
+                En_type = 'angRW'
+        else:
+            if (diffX == -1 and diffY == 1):
+                En_type = 'angRB'
+            elif (diffX == -1 and diffY == -1):
+                En_type = 'angLB'
+        perform_En_passant(En_type, target)
 
     else:
         print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
@@ -222,21 +249,37 @@ def perform_castling(castling_type, move_set):
             if is_valid_move("WK", (7,4), (7,2)):
                 board_state[7][4], board_state[7][2] = None, "WK"
                 board_state[7][0], board_state[7][3] = None, "WR"
+                turn_count += 1  # 캐슬링 후 턴 증가
+            else: 
+                print("규칙오류 : 캐슬링이 불가능합니다.")
+                turn_count-=1
         elif (0, 4) in move_set:  # 블랙 퀸 사이드
             if is_valid_move("BK", (0,4), (0,2)):
                 board_state[0][4], board_state[0][2] = None, "BK"
                 board_state[0][0], board_state[0][3] = None, "BR"
+                turn_count += 1  # 캐슬링 후 턴 증가
+            else: 
+                print("규칙오류 : 캐슬링이 불가능합니다.")
+                turn_count-=1
     elif castling_type == "king":
         if (7, 4) in move_set:  # 화이트 킹 사이드
             if is_valid_move("WK", (7,4), (7,6)):
                 board_state[7][4], board_state[7][6] = None, "WK"
                 board_state[7][7], board_state[7][5] = None, "WR"
+                turn_count += 1  # 캐슬링 후 턴 증가
+            else: 
+                print("규칙오류 : 캐슬링이 불가능합니다.")
+                turn_count-=1
         elif (0, 4) in move_set:  # 블랙 킹 사이드
             if is_valid_move("BK", (0,4), (0,6)):
                 board_state[0][4], board_state[0][6] = None, "BK"
                 board_state[0][7], board_state[0][5] = None, "BR"
+                turn_count += 1  # 캐슬링 후 턴 증가
+            else: 
+                print("규칙오류 : 캐슬링이 불가능합니다.")
+                turn_count-=1
 
-    turn_count += 1  # 캐슬링 후 턴 증가
+    
     # 체스 기물 이동 규칙을 확인하는 함수
 
 def is_valid_move(piece, start, end):
