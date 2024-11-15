@@ -239,6 +239,67 @@ def perform_castling(castling_type, move_set):
     turn_count += 1  # 캐슬링 후 턴 증가
     # 체스 기물 이동 규칙을 확인하는 함수
 
+def perform_En_passant(En_passant_type, En_passant_target):
+    """
+    앙파상을 수행하는 함수.
+    :param En_passant_type: 앙파상 타입 (angLW, angRW, angLB, angRB)
+                           - angLW: 백 폰이 오른쪽 대각선으로 이동하여 흑 폰을 잡음
+                           - angRW: 백 폰이 왼쪽 대각선으로 이동하여 흑 폰을 잡음
+                           - angLB: 흑 폰이 오른쪽 대각선으로 이동하여 백 폰을 잡음
+                           - angRB: 흑 폰이 왼쪽 대각선으로 이동하여 백 폰을 잡음
+    :param En_passant_target: 잡히는 상대 기물의 좌표 (row, col)
+    """
+    global board_state
+    global turn_count
+
+    target_row, target_col = En_passant_target
+
+    if En_passant_type == "angLW":  # 백 폰이 오른쪽 대각선으로 이동
+        # 백 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 위 칸
+        move_row, move_col = target_row - 1, target_col
+        if is_valid_move("WP", (target_row, target_col - 1), (move_row, move_col)):
+            # 백 폰 이동
+            board_state[target_row][target_col - 1] = None
+            board_state[move_row][move_col] = "WP"
+            # 흑 폰 제거
+            board_state[target_row][target_col] = None
+
+    elif En_passant_type == "angRW":  # 백 폰이 왼쪽 대각선으로 이동
+        # 백 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 위 칸
+        move_row, move_col = target_row - 1, target_col
+        if is_valid_move("WP", (target_row, target_col + 1), (move_row, move_col)):
+            # 백 폰 이동
+            board_state[target_row][target_col + 1] = None
+            board_state[move_row][move_col] = "WP"
+            # 흑 폰 제거
+            board_state[target_row][target_col] = None
+
+    elif En_passant_type == "angLB":  # 흑 폰이 오른쪽 대각선으로 이동
+        # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
+        move_row, move_col = target_row + 1, target_col
+        if is_valid_move("BP", (target_row, target_col - 1), (move_row, move_col)):
+            # 흑 폰 이동
+            board_state[target_row][target_col - 1] = None
+            board_state[move_row][move_col] = "BP"
+            # 백 폰 제거
+            board_state[target_row][target_col] = None
+
+    elif En_passant_type == "angRB":  # 흑 폰이 왼쪽 대각선으로 이동
+        # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
+        move_row, move_col = target_row + 1, target_col
+        if is_valid_move("BP", (target_row, target_col + 1), (move_row, move_col)):
+            # 흑 폰 이동
+            board_state[target_row][target_col + 1] = None
+            board_state[move_row][move_col] = "BP"
+            # 백 폰 제거
+            board_state[target_row][target_col] = None
+
+    else:
+        print("Invalid En Passant type!")
+
+    turn_count += 1  # 앙파상 후 턴 증가
+
+
 def is_valid_move(piece, start, end):
     """
     체스 기물의 이동 규칙을 검사합니다. 캐슬링 조건 포함.
@@ -266,7 +327,8 @@ def is_valid_move(piece, start, end):
                         (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
             else:  # 일반 이동
                 return ((row_diff == -1 and col_diff == 0 and board_state[end_row][end_col] is None) or
-                        (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
+                        (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None)
+                        (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row+1][end_col] is not None)) #앙파상 판별
 
         # 룩
         elif piece == 'WR':
@@ -317,7 +379,8 @@ def is_valid_move(piece, start, end):
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
             else:  # 일반 이동
                 return ((row_diff == 1 and col_diff == 0 and board_state[end_row][end_col] is None) or
-                        (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
+                        (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None)
+                        (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row-1][end_col] is not None)) #마지막줄 - 앙파상 판별
         # 룩
         elif piece == 'BR':
             if start[0]==7 and start[1]==0:
