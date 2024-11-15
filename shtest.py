@@ -2,6 +2,17 @@ import cv2
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 
+turn_count = 1  # 턴을 관리할 변수
+board_state = [
+    ["BR", "BN", "BB", "BQ", "BK", "BB", "BN", "BR"],  # 백 기물의 첫 번째 줄
+    ["BP", "BP", "BP", "BP", "BP", "BP", "BP", "BP"],  # 백 폰의 줄
+    [None, None, None, None, None, None, None, None],  # 빈 칸
+    [None, None, None, None, None, None, None, None],  # 빈 칸
+    [None, None, None, None, None, None, None, None],  # 빈 칸
+    [None, None, None, None, None, None, None, None],  # 빈 칸
+    ["WP", "WP", "WP", "WP", "WP", "WP", "WP", "WP"],  # 흑 폰의 줄
+    ["WR", "WN", "WB", "WQ", "WK", "WB", "WN", "WR"]   # 흑 기물의 첫 번째 줄
+]
 # 사진을 체스판으로 자르기
 def detect_and_crop_chessboard(image_path):
     # 이미지 불러오기
@@ -89,18 +100,6 @@ def compare_cells(cell1, cell2):
     # 구조적 유사도 계산
     score, _ = ssim(cell1_gray, cell2_gray, full=True)
     return score
-
-turn_count = 1  # 턴을 관리할 변수
-board_state = [
-    ["BR", "BN", "BB", "BQ", "BK", "BB", "BN", "BR"],  # 백 기물의 첫 번째 줄
-    ["BP", "BP", "BP", "BP", "BP", "BP", "BP", "BP"],  # 백 폰의 줄
-    [None, None, None, None, None, None, None, None],  # 빈 칸
-    [None, None, None, None, None, None, None, None],  # 빈 칸
-    [None, None, None, None, None, None, None, None],  # 빈 칸
-    [None, None, None, None, None, None, None, None],  # 빈 칸
-    ["WP", "WP", "WP", "WP", "WP", "WP", "WP", "WP"],  # 흑 폰의 줄
-    ["WR", "WN", "WB", "WQ", "WK", "WB", "WN", "WR"]   # 흑 기물의 첫 번째 줄
-]
 
 def detect_moves(initial_image, new_image):
 
@@ -244,60 +243,6 @@ def is_valid_move(piece, start, end):
         elif piece == 'BK':
             return abs(row_diff) <= 1 and abs(col_diff) <= 1
 
-def detect_moves_with_rules(initial_image, new_image):
-    """
-    체스판 이동을 감지하고, 이동 규칙 위반 여부를 검사합니다.
-    """
-    global board_state  # 체스판 상태를 전역 변수로 가져오기
-    global turn_count   # 턴 수를 전역 변수로 가져오기
-
-    # 체스판을 8x8 셀로 나누기
-    initial_board = split_chessboard(initial_image)
-    new_board = split_chessboard(new_image)
-    moves = []  # 이동된 위치를 저장할 리스트
-
-    # 두 이미지의 체스판을 비교하여 이동 위치를 찾기
-    for i in range(8):
-        for j in range(8):
-            similarity = compare_cells(initial_board[i][j], new_board[i][j])
-
-            # SSIM 유사도가 0.9 이하라면 이동 발생으로 간주
-            if similarity < 0.9:
-                moves.append((i, j))  # 이동 위치 추가
-
-    # 이동된 위치가 두 곳으로 감지된 경우
-    if len(moves) == 2:
-        Acell, Bcell = moves  # 이동된 두 위치
-        piece_A = board_state[Acell[0]][Acell[1]]  # Acell의 기물
-        piece_B = board_state[Bcell[0]][Bcell[1]]  # Bcell의 기물
-
-        if piece_A is not None and piece_B is None:
-            # A 위치에 기물이 있고 B 위치는 비어있는 경우 (일반 이동)
-            if is_valid_move(piece_A, Acell, Bcell):
-                print(f"{piece_A}가 {Acell}에서 {Bcell}로 이동했습니다.")
-                board_state[Acell[0]][Acell[1]] = None  # A 위치는 빈칸으로 설정
-                board_state[Bcell[0]][Bcell[1]] = piece_A  # B 위치로 기물 이동
-            else:
-                print(f"규칙 위반: {piece_A}가 {Acell}에서 {Bcell}로 이동할 수 없습니다.")
-
-        elif piece_A is None and piece_B is not None:
-            # B 위치에 기물이 있고 A 위치는 비어있는 경우 
-            print(f"{piece_B}가 {Bcell}에서 {Acell}로 이동했습니다.")
-
-        elif piece_A is not None and piece_B is not None:
-            # 두 위치 모두 기물이 있는 경우 (기물 잡기 상황)
-            if is_valid_move(piece_A, Acell, Bcell):
-                print(f"{piece_A}가 {Acell}에서 {Bcell}로 이동하며 {piece_B}를 잡았습니다.")
-                board_state[Acell[0]][Acell[1]] = None  # A 위치는 빈칸으로 설정
-                board_state[Bcell[0]][Bcell[1]] = piece_A  # B 위치로 A 기물 이동
-            else:
-                print(f"규칙 위반: {piece_A}가 {Acell}에서 {Bcell}로 이동할 수 없습니다.")
-
-        # 턴 증가
-        turn_count += 1
-    else:
-        # 이동 감지가 실패하거나 복수의 이동이 감지된 경우
-        print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
 
 # 이미지 경로 설정
 image1 = 'c1.PNG'  # 업로드한 체스판 이미지 경로 사용
