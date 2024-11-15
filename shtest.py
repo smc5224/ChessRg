@@ -300,15 +300,15 @@ def detect_moves_with_rules(initial_image, new_image):
         print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
 
 # 이미지 경로 설정
-image1 = 'c1.PNG'  # 업로드한 체스판 이미지 경로 사용
+image1 = 'ChessRg\c1.PNG'  # 업로드한 체스판 이미지 경로 사용
 image1 = detect_and_crop_chessboard(image1)
-image2 = 'c2.PNG'          # 두 번째 체스판 이미지 경로
+image2 = 'ChessRg\c2.PNG'          # 두 번째 체스판 이미지 경로
 image2 = detect_and_crop_chessboard(image2)
-image3 = 'c3.PNG'  # 업로드한 체스판 이미지 경로 사용
+image3 = 'ChessRg\c3.PNG'  # 업로드한 체스판 이미지 경로 사용
 image3 = detect_and_crop_chessboard(image3)
-image4 = 'c4.PNG'          # 두 번째 체스판 이미지 경로
+image4 = 'ChessRg\c4.PNG'          # 두 번째 체스판 이미지 경로
 image4 = detect_and_crop_chessboard(image4)
-image5 = 'c5.PNG'  # 업로드한 체스판 이미지 경로 사용
+image5 = 'ChessRg\c5.PNG'  # 업로드한 체스판 이미지 경로 사용
 image5 = detect_and_crop_chessboard(image5)
 
 # 이동 감지
