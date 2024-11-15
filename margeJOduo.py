@@ -220,7 +220,6 @@ def detect_moves(initial_image, new_image):
                 if abs(diffX) == 1 and abs(diffY) == 1:
                     # 대각선 관계가 있는 경우 나머지 좌표를 target으로 설정
                     target = moves[3 - i - j]  # 남은 하나의 인덱스
-                    turn_count += 1
                     if turn_count % 2 != 0:
                         if (diffX == -1 and diffY == 1):
                             En_type = 'angLW'
@@ -231,12 +230,9 @@ def detect_moves(initial_image, new_image):
                             En_type = 'angRB'
                         elif (diffX == -1 and diffY == -1):
                             En_type = 'angLB'
-        
-        
+                    turn_count += 1
 
-        print(diffX, diffY)        
-        if En_type is not None:
-            perform_En_passant(En_type, target)
+        perform_En_passant(En_type, target)
 
     else:
         print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
