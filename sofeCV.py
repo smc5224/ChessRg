@@ -1,53 +1,62 @@
 import cv2
 import numpy as np
 
-# 이미지 로드 및 그레이스케일 변환
+# 체스판 크기 설정 (7x7 내부 코너)
+CHESSBOARD_SIZE = (7, 7)
+
+# 이미지 읽기
 image = cv2.imread('KakaoTalk_20241113_004647539.png')
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-# 체스보드 크기 (8x8 체스판 내부 코너의 수는 7x7)
-pattern_size = (8, 8)
-
-# 체스판 코너 감지
-ret, corners = cv2.findChessboardCorners(gray, pattern_size, cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_FAST_CHECK + cv2.CALIB_CB_NORMALIZE_IMAGE)
+# 체스판 코너 검출
+ret, corners = cv2.findChessboardCorners(gray, CHESSBOARD_SIZE, None)
 
 if ret:
-    # 코너 점들을 더 정밀하게 조정
-    corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), 
-                               criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001))
+    # 코너 위치를 서브픽셀 수준으로 보정
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+    corners_refined = cv2.cornerSubPix(gray, corners, (5, 5), (-1, -1), criteria)
 
-    # 8x8 격자의 바깥쪽 네 점 선택
-    top_left = tuple(corners[0][0])  # 좌상단
-    top_right = tuple(corners[6][0])  # 우상단
-    bottom_left = tuple(corners[-7][0])  # 좌하단
-    bottom_right = tuple(corners[-1][0])  # 우하단
+    # 코너 좌표를 numpy 배열로 변환
+    corners_refined = corners_refined.squeeze()
 
-    # 네 꼭짓점을 파란색 원으로 표시
-    for point in [top_left, top_right, bottom_left, bottom_right]:
-        cv2.circle(image, (int(point[0]), int(point[1])), 10, (255, 0, 0), -1)  # 파란색으로 표시
+    # 한 칸의 길이 계산 (평균 가로 및 세로 거리)
+    grid_widths = np.diff(corners_refined[:, 0].reshape(CHESSBOARD_SIZE[1], CHESSBOARD_SIZE[0]), axis=1).mean()
+    grid_heights = np.diff(corners_refined[:, 1].reshape(CHESSBOARD_SIZE[1], CHESSBOARD_SIZE[0]), axis=0).mean()
 
-    # 8x8 격자 그리기
-    for i in range(7):
-        for j in range(7):
-            if j < 6:
-                pt1 = tuple(corners[i * 7 + j][0])
-                pt2 = tuple(corners[i * 7 + (j + 1)][0])
-                cv2.line(image, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), (0, 255, 0), 2)
-            if i < 6:
-                pt1 = tuple(corners[i * 7 + j][0])
-                pt2 = tuple(corners[(i + 1) * 7 + j][0])
-                cv2.line(image, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), (0, 255, 0), 2)
+    # 새로운 코너 생성 (테두리 확장)
+    expanded_corners = []
+    for row in range(-1, CHESSBOARD_SIZE[1] + 1):
+        for col in range(-1, CHESSBOARD_SIZE[0] + 1):
+            x = corners_refined[0][0] + col * grid_widths
+            y = corners_refined[0][1] + row * grid_heights
+            expanded_corners.append((x, y))
 
-    # 결과 이미지 출력
-    scale_percent = 50  # 50%로 축소
-    width = int(image.shape[1] * scale_percent / 100)
-    height = int(image.shape[0] * scale_percent / 100)
-    dim = (width, height)
+    expanded_corners = np.array(expanded_corners, dtype=np.float32).reshape((CHESSBOARD_SIZE[1] + 2, CHESSBOARD_SIZE[0] + 2, 2))
 
-    # 크기 조절
-    resized_image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
-    cv2.imshow('Chessboard with Outer Points', resized_image)
+    # 격자선 그리기
+    for row in range(expanded_corners.shape[0]):
+        for col in range(expanded_corners.shape[1] - 1):
+            pt1 = tuple(expanded_corners[row, col])
+            pt2 = tuple(expanded_corners[row, col + 1])
+            cv2.line(image, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), (0, 255, 0), 2)
+
+    for row in range(expanded_corners.shape[0] - 1):
+        for col in range(expanded_corners.shape[1]):
+            pt1 = tuple(expanded_corners[row, col])
+            pt2 = tuple(expanded_corners[row + 1, col])
+            cv2.line(image, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), (255, 0, 0), 2)
+
+    # 코너를 표시
+    for corner in expanded_corners.reshape(-1, 2):
+        cv2.circle(image, (int(corner[0]), int(corner[1])), 5, (0, 0, 255), -1)
+
+    # 이미지 크기를 절반으로 축소
+    height, width = image.shape[:2]
+    resized_image = cv2.resize(image, (width // 2, height // 2))
+
+    # 결과 출력
+    cv2.imshow('Expanded Chessboard with Grid Lines (Resized)', resized_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 else:
-    print("체스보드 코너를 찾을 수 없습니다.")
+    print("체스판 코너를 찾을 수 없습니다.")
