@@ -414,7 +414,6 @@ def is_valid_move(piece, start, end):
             else:  # 일반 이동
                 return ((row_diff == -1 and col_diff == 0 and board_state[end_row][end_col] is None) or
                         (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
-                        (row_diff == -1 and abs(col_diff) == -1 and board_state[end_row][end_col] is not None)
                         (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row+1][end_col] is not None)) #앙파상 판별
 
         # 룩
@@ -467,7 +466,6 @@ def is_valid_move(piece, start, end):
             else:  # 일반 이동
                 return ((row_diff == 1 and col_diff == 0 and board_state[end_row][end_col] is None) or
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
-                        (row_diff == 1 and abs(col_diff) == -1 and board_state[end_row][end_col] is not None)
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row-1][end_col] is not None)) #마지막줄 - 앙파상 판별
         # 룩
         elif piece == 'BR':
