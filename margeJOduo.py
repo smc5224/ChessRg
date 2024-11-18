@@ -149,18 +149,19 @@ def detect_moves(initial_image, new_image):
         elif piece_A is None and piece_B is not None:
             if is_valid_move(piece_B, Bcell, Acell) == True:
                 if ((piece_B=='WP' and Acell[0] == 0) or (piece_B=='BP'and Acell[0] == 7)): #프로모션 조건 확인
-                    # A에 기물이 있고 B는 비어 있는 경우
+                    # B에 기물이 있고 A는 비어 있는 경우
                     perform_promotion(piece_B, Bcell, Acell)
+                else:
                 # B에 기물이 있고 A는 비어 있는 경우
-                print(f"{piece_B}가 {Bcell}에서 {Acell}로 이동했습니다.")
-                board_state[Bcell[0]][Bcell[1]] = None  # B 위치를 빈칸으로
-                board_state[Acell[0]][Acell[1]] = piece_B  # A 위치로 이동
+                    print(f"{piece_B}가 {Bcell}에서 {Acell}로 이동했습니다.")
+                    board_state[Bcell[0]][Bcell[1]] = None  # B 위치를 빈칸으로
+                    board_state[Acell[0]][Acell[1]] = piece_B  # A 위치로 이동
             else : 
                 print(f"규칙오류 : {piece_B}가 {Bcell}에서 {Acell}로 이동할 수 없습니다.")
                 turn_count-=1
         else:
             if turn_count % 2 != 0:
-                if board_state[Acell[0]][Acell[1]].startswith() == 'W':
+                if board_state[Acell[0]][Acell[1]].startswith('W'):
                     startCell = Acell
                     start_piece = piece_A
                     endCell = Bcell
@@ -169,8 +170,9 @@ def detect_moves(initial_image, new_image):
                     startCell = Bcell
                     start_piece = piece_B
                     endCell = Acell
+                    end_piece = piece_A
             else:
-                if board_state[Acell[0]][Acell[1]].startswith() == 'W':
+                if board_state[Acell[0]][Acell[1]].startswith('W'):
                     startCell = Bcell
                     start_piece = piece_B
                     endCell = Acell
@@ -183,17 +185,16 @@ def detect_moves(initial_image, new_image):
 
             if is_valid_move(start_piece, startCell, endCell) == True:
                 # 두 위치 모두 기물이 있는 경우 (기물 잡기 상황)
-                if ((start_piece=='WP' and end_piece[0] == 0) or (start_piece=='BP'and end_piece[0] == 7)): #프로모션 조건 확인
-                    # A에 기물이 있고 B는 비어 있는 경우
-                    perform_promotion(start_piece, Acell, Bcell)
+                if ((start_piece=='WP' and endCell[0] == 0) or (start_piece=='BP'and endCell[0] == 7)): #프로모션 조건 확인
+                    perform_promotion(start_piece, startCell, endCell)
                 else:    
                     if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
                         print(f"백의 {start_piece}가 {endCell}에서 흑의 {end_piece}를 잡았습니다.")
                     else:  # 짝수 턴이면 흑이 백을 잡음
                         print(f"흑의 {start_piece}가 {endCell}에서 백의 {end_piece}를 잡았습니다.")
-                
-                board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
-                board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
+                    board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
+                    board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
+
             else :
                     if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
                         print(f"규칙오류 : 백의 {piece_A}가 {Bcell}에서 흑의 {piece_B}를 잡을 수 없습니다.")
@@ -383,9 +384,6 @@ def perform_promotion(piece, start, end):
 
     print(f"{piece}가 {start}에서 {end}로 이동한 후 {promoted_piece}(으)로 프로모션되었습니다.")
 
-    # 턴 증가
-    turn_count += 1
-
 
 
 def is_valid_move(piece, start, end):
@@ -416,6 +414,7 @@ def is_valid_move(piece, start, end):
             else:  # 일반 이동
                 return ((row_diff == -1 and col_diff == 0 and board_state[end_row][end_col] is None) or
                         (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
+                        (row_diff == -1 and abs(col_diff) == -1 and board_state[end_row][end_col] is not None)
                         (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row+1][end_col] is not None)) #앙파상 판별
 
         # 룩
@@ -468,6 +467,7 @@ def is_valid_move(piece, start, end):
             else:  # 일반 이동
                 return ((row_diff == 1 and col_diff == 0 and board_state[end_row][end_col] is None) or
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
+                        (row_diff == 1 and abs(col_diff) == -1 and board_state[end_row][end_col] is not None)
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row-1][end_col] is not None)) #마지막줄 - 앙파상 판별
         # 룩
         elif piece == 'BR':
@@ -512,10 +512,11 @@ def is_valid_move(piece, start, end):
     return False
 
 # 이미지 경로 설정
-for i in range(9):
-    imageA = f'ChessRg\CLtest\{i+1}.PNG'  # 업로드한 체스판 이미지 경로 사용
+for i in range(1, 15):
+    imageA = f'ChessRg\protest\\test ({i}).png'  # 업로드한 체스판 이미지 경로 사용
     imageA = detect_and_crop_chessboard(imageA)
-    imageB = f'ChessRg\CLtest\{i+2}.PNG'          # 두 번째 체스판 이미지 경로
+    imageB = f'ChessRg\protest\\test ({i+1}).png'          # 두 번째 체스판 이미지 경로
     imageB = detect_and_crop_chessboard(imageB)
     detect_moves(imageA, imageB)
     print(turn_count)
+    print(board_state)

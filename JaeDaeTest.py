@@ -133,26 +133,35 @@ def detect_moves(initial_image, new_image):
 
         if piece_A is not None and piece_B is None:
             if is_valid_move(piece_A, Acell, Bcell) == True:
-                # A에 기물이 있고 B는 비어 있는 경우
-                print(f"{piece_A}가 {Acell}에서 {Bcell}로 이동했습니다.")
-                board_state[Acell[0]][Acell[1]] = None  # A 위치를 빈칸으로
-                board_state[Bcell[0]][Bcell[1]] = piece_A  # B 위치로 이동
+                if ((piece_A=='WP' and Bcell[0] == 0) or (piece_A=='BP'and Bcell[0] == 7)): #프로모션 조건 확인
+                    # A에 기물이 있고 B는 비어 있는 경우
+                    perform_promotion(piece_A, Acell, Bcell)
+                    
+                else:       
+                    # A에 기물이 있고 B는 비어 있는 경우
+                    print(f"{piece_A}가 {Acell}에서 {Bcell}로 이동했습니다.")
+                    board_state[Acell[0]][Acell[1]] = None  # A 위치를 빈칸으로
+                    board_state[Bcell[0]][Bcell[1]] = piece_A  # B 위치로 이동
             else : 
                 print(f"규칙오류 : {piece_A}가 {Acell}에서 {Bcell}로 이동할 수 없습니다.")
                 turn_count-=1
 
         elif piece_A is None and piece_B is not None:
             if is_valid_move(piece_B, Bcell, Acell) == True:
+                if ((piece_B=='WP' and Acell[0] == 0) or (piece_B=='BP'and Acell[0] == 7)): #프로모션 조건 확인
+                    # B에 기물이 있고 A는 비어 있는 경우
+                    perform_promotion(piece_B, Bcell, Acell)
+                else:
                 # B에 기물이 있고 A는 비어 있는 경우
-                print(f"{piece_B}가 {Bcell}에서 {Acell}로 이동했습니다.")
-                board_state[Bcell[0]][Bcell[1]] = None  # B 위치를 빈칸으로
-                board_state[Acell[0]][Acell[1]] = piece_B  # A 위치로 이동
+                    print(f"{piece_B}가 {Bcell}에서 {Acell}로 이동했습니다.")
+                    board_state[Bcell[0]][Bcell[1]] = None  # B 위치를 빈칸으로
+                    board_state[Acell[0]][Acell[1]] = piece_B  # A 위치로 이동
             else : 
                 print(f"규칙오류 : {piece_B}가 {Bcell}에서 {Acell}로 이동할 수 없습니다.")
                 turn_count-=1
         else:
             if turn_count % 2 != 0:
-                if board_state[Acell[0]][Acell[1]].startswith() == 'W':
+                if board_state[Acell[0]][Acell[1]].startswith('W'):
                     startCell = Acell
                     start_piece = piece_A
                     endCell = Bcell
@@ -161,8 +170,9 @@ def detect_moves(initial_image, new_image):
                     startCell = Bcell
                     start_piece = piece_B
                     endCell = Acell
+                    end_piece = piece_A
             else:
-                if board_state[Acell[0]][Acell[1]].startswith() == 'W':
+                if board_state[Acell[0]][Acell[1]].startswith('W'):
                     startCell = Bcell
                     start_piece = piece_B
                     endCell = Acell
@@ -173,23 +183,25 @@ def detect_moves(initial_image, new_image):
                     endCell = Bcell
                     end_piece = piece_B
 
-            if is_valid_move(piece_A, startCell, endCell) == True:
+            if is_valid_move(start_piece, startCell, endCell) == True:
                 # 두 위치 모두 기물이 있는 경우 (기물 잡기 상황)
-                if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
-                    print(f"백의 {start_piece}가 {endCell}에서 흑의 {end_piece}를 잡았습니다.")
-                else:  # 짝수 턴이면 흑이 백을 잡음
-                    print(f"흑의 {start_piece}가 {endCell}에서 백의 {end_piece}를 잡았습니다.")
-                
-                board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
-                board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
-            else :
+                if ((start_piece=='WP' and endCell[0] == 0) or (start_piece=='BP'and endCell[0] == 7)): #프로모션 조건 확인
+                    perform_promotion(start_piece, startCell, endCell)
+                else:    
+                    if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
+                        print(f"백의 {start_piece}가 {endCell}에서 흑의 {end_piece}를 잡았습니다.")
+                    else:  # 짝수 턴이면 흑이 백을 잡음
+                        print(f"흑의 {start_piece}가 {endCell}에서 백의 {end_piece}를 잡았습니다.")
+                    board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
+                    board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
 
-                if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
-                    print(f"규칙오류 : 백의 {piece_A}가 {Bcell}에서 흑의 {piece_B}를 잡을 수 없습니다.")
-                    turn_count-=1
-                else:  # 짝수 턴이면 흑이 백을 잡음
-                    print(f"규칙오류 : 흑의 {piece_A}가 {Bcell}에서 백의 {piece_B}를 잡을 수 없습니다.")
-                    turn_count-=1
+            else :
+                    if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
+                        print(f"규칙오류 : 백의 {piece_A}가 {Bcell}에서 흑의 {piece_B}를 잡을 수 없습니다.")
+                        turn_count-=1
+                    else:  # 짝수 턴이면 흑이 백을 잡음
+                        print(f"규칙오류 : 흑의 {piece_A}가 {Bcell}에서 백의 {piece_B}를 잡을 수 없습니다.")
+                        turn_count-=1
         # 턴 수 증가
         turn_count += 1
 
@@ -220,21 +232,17 @@ def detect_moves(initial_image, new_image):
                 if abs(diffX) == 1 and abs(diffY) == 1:
                     # 대각선 관계가 있는 경우 나머지 좌표를 target으로 설정
                     target = moves[3 - i - j]  # 남은 하나의 인덱스
-                    turn_count += 1
-                else:
-                    print(f"규칙오류 : 앙파상이 아닙니다.")
-                    turn_count -= 1
-                    
-        if turn_count % 2 != 0:
-            if (diffX == -1 and diffY == 1):
-                En_type = 'angLW'
-            elif (diffX == -1 and diffY == -1):
-                En_type = 'angRW'
-        else:
-            if (diffX == -1 and diffY == 1):
-                En_type = 'angRB'
-            elif (diffX == -1 and diffY == -1):
-                En_type = 'angLB'
+                    if turn_count % 2 != 0:
+                        if (diffX == -1 and diffY == 1):
+                            En_type = 'angLW'
+                        elif (diffX == -1 and diffY == -1):
+                            En_type = 'angRW'
+                    else:
+                        if (diffX == -1 and diffY == 1):
+                            En_type = 'angRB'
+                        elif (diffX == -1 and diffY == -1):
+                            En_type = 'angLB'
+
         perform_En_passant(En_type, target)
 
     else:
@@ -282,6 +290,102 @@ def perform_castling(castling_type, move_set):
     
     # 체스 기물 이동 규칙을 확인하는 함수
 
+def perform_En_passant(En_passant_type, En_passant_target):
+    """
+    앙파상을 수행하는 함수.
+    :param En_passant_type: 앙파상 타입 (angLW, angRW, angLB, angRB)
+    - angLW: 백 폰이 오른쪽 대각선으로 이동하여 흑 폰을 잡음
+    - angRW: 백 폰이 왼쪽 대각선으로 이동하여 흑 폰을 잡음
+    - angLB: 흑 폰이 오른쪽 대각선으로 이동하여 백 폰을 잡음
+    - angRB: 흑 폰이 왼쪽 대각선으로 이동하여 백 폰을 잡음
+    :param En_passant_target: 잡히는 상대 기물의 좌표 (row, col)
+    """
+    global board_state
+    global turn_count
+
+    target_row, target_col = En_passant_target
+
+    if En_passant_type == "angLW":  # 백 폰이 오른쪽 대각선으로 이동
+        # 백 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 위 칸
+        move_row, move_col = target_row - 1, target_col
+        if is_valid_move("WP", (target_row, target_col - 1), (move_row, move_col)):
+            # 백 폰 이동
+            board_state[target_row][target_col - 1] = None
+            board_state[move_row][move_col] = "WP"
+            # 흑 폰 제거
+            board_state[target_row][target_col] = None
+
+    elif En_passant_type == "angRW":  # 백 폰이 왼쪽 대각선으로 이동
+        # 백 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 위 칸
+        move_row, move_col = target_row - 1, target_col
+        if is_valid_move("WP", (target_row, target_col + 1), (move_row, move_col)):
+            # 백 폰 이동
+            board_state[target_row][target_col + 1] = None
+            board_state[move_row][move_col] = "WP"
+            # 흑 폰 제거
+            board_state[target_row][target_col] = None
+
+    elif En_passant_type == "angLB":  # 흑 폰이 오른쪽 대각선으로 이동
+        # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
+        move_row, move_col = target_row + 1, target_col
+        if is_valid_move("BP", (target_row, target_col - 1), (move_row, move_col)):
+            # 흑 폰 이동
+            board_state[target_row][target_col - 1] = None
+            board_state[move_row][move_col] = "BP"
+            # 백 폰 제거
+            board_state[target_row][target_col] = None
+
+    elif En_passant_type == "angRB":  # 흑 폰이 왼쪽 대각선으로 이동
+        # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
+        move_row, move_col = target_row + 1, target_col
+        if is_valid_move("BP", (target_row, target_col + 1), (move_row, move_col)):
+            # 흑 폰 이동
+            board_state[target_row][target_col + 1] = None
+            board_state[move_row][move_col] = "BP"
+            # 백 폰 제거
+            board_state[target_row][target_col] = None
+
+    else:
+        print("Invalid En Passant type!")
+
+    turn_count += 1  # 앙파상 후 턴 증가
+
+def perform_promotion(piece, start, end):
+    global board_state
+    global turn_count
+
+    # 프로모션 가능한 기물 확인 (퀸, 룩, 나이트, 비숍 중 선택 가능)
+    promotion_options = ['Q', 'R', 'N', 'B']
+
+    if piece == 'WP' :
+        print("백 폰 프로모션: 퀸(Q), 룩(R), 나이트(N), 비숍(B) 중 선택하십시오.")
+    elif piece == 'BP':
+        print("흑 폰 프로모션: 퀸(Q), 룩(R), 나이트(N), 비숍(B) 중 선택하십시오.")
+    else:
+        print("프로모션 가능한 폰이 아닙니다.")
+        return
+
+    # 사용자 입력 받기 (기물을 선택)
+    while True:
+        new_piece = input("선택할 기물을 입력하세요 (Q, R, N, B): ").upper()
+        if new_piece in promotion_options:
+            break
+        print("잘못된 선택입니다. 다시 입력하세요.")
+
+    # 백 폰과 흑 폰에 따른 기물 설정
+    if piece == 'WP':
+        promoted_piece = 'W' + new_piece  # 백 기물
+    elif piece == 'BP':
+        promoted_piece = 'B' + new_piece  # 흑 기물
+
+    # 프로모션 수행
+    board_state[start[0]][start[1]] = None  # 기존 폰 제거
+    board_state[end[0]][end[1]] = promoted_piece  # 새 기물 배치
+
+    print(f"{piece}가 {start}에서 {end}로 이동한 후 {promoted_piece}(으)로 프로모션되었습니다.")
+
+
+
 def is_valid_move(piece, start, end):
     """
     체스 기물의 이동 규칙을 검사합니다. 캐슬링 조건 포함.
@@ -309,7 +413,9 @@ def is_valid_move(piece, start, end):
                         (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
             else:  # 일반 이동
                 return ((row_diff == -1 and col_diff == 0 and board_state[end_row][end_col] is None) or
-                        (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
+                        (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
+                        (row_diff == -1 and abs(col_diff) == -1 and board_state[end_row][end_col] is not None)
+                        (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row+1][end_col] is not None)) #앙파상 판별
 
         # 룩
         elif piece == 'WR':
@@ -360,7 +466,9 @@ def is_valid_move(piece, start, end):
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
             else:  # 일반 이동
                 return ((row_diff == 1 and col_diff == 0 and board_state[end_row][end_col] is None) or
-                        (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None))
+                        (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
+                        (row_diff == 1 and abs(col_diff) == -1 and board_state[end_row][end_col] is not None)
+                        (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row-1][end_col] is not None)) #마지막줄 - 앙파상 판별
         # 룩
         elif piece == 'BR':
             if start[0]==7 and start[1]==0:
@@ -404,10 +512,11 @@ def is_valid_move(piece, start, end):
     return False
 
 # 이미지 경로 설정
-for i in range(9):
-    imageA = f'ChessRg\CLtest\{i+1}.PNG'  # 업로드한 체스판 이미지 경로 사용
+for i in range(1, 15):
+    imageA = f'ChessRg\protest\\test ({i}).png'  # 업로드한 체스판 이미지 경로 사용
     imageA = detect_and_crop_chessboard(imageA)
-    imageB = f'ChessRg\CLtest\{i+2}.PNG'          # 두 번째 체스판 이미지 경로
+    imageB = f'ChessRg\protest\\test ({i+1}).png'          # 두 번째 체스판 이미지 경로
     imageB = detect_and_crop_chessboard(imageB)
     detect_moves(imageA, imageB)
+    print(turn_count)
     print(board_state)
