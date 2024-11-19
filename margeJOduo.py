@@ -186,7 +186,17 @@ def detect_moves(initial_image, new_image):
             if is_valid_move(start_piece, startCell, endCell) == True:
                 # 두 위치 모두 기물이 있는 경우 (기물 잡기 상황)
                 if ((start_piece=='WP' and endCell[0] == 0) or (start_piece=='BP'and endCell[0] == 7)): #프로모션 조건 확인
-                    perform_promotion(start_piece, startCell, endCell)
+                    perform_promotion(start_piece, startCell, endCell) 
+
+                elif end_piece.endswith('K'):       #게임 끝낫는지 확인
+                    if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
+                        print(f"백의 {start_piece}가 {endCell}에서 흑의 {end_piece}를 잡으며 백이 승리합니다.")
+                    else:  # 짝수 턴이면 흑이 백을 잡음
+                        print(f"흑의 {start_piece}가 {endCell}에서 백의 {end_piece}를 잡으며 흑이 승리합니다.")
+                    board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
+                    board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
+                    
+
                 else:    
                     if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
                         print(f"백의 {start_piece}가 {endCell}에서 흑의 {end_piece}를 잡았습니다.")
@@ -194,6 +204,7 @@ def detect_moves(initial_image, new_image):
                         print(f"흑의 {start_piece}가 {endCell}에서 백의 {end_piece}를 잡았습니다.")
                     board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
                     board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
+                    
 
             else :
                     if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
@@ -202,6 +213,7 @@ def detect_moves(initial_image, new_image):
                     else:  # 짝수 턴이면 흑이 백을 잡음
                         print(f"규칙오류 : 흑의 {piece_A}가 {Bcell}에서 백의 {piece_B}를 잡을 수 없습니다.")
                         turn_count-=1
+                        
         # 턴 수 증가
         turn_count += 1
 
@@ -507,9 +519,23 @@ def is_valid_move(piece, start, end):
     # 정의되지 않은 기물인 경우
     return False
 
-for i in range(1, 14):
-    imageA = f'ChessRg\protest\\test ({i}).png'  # 업로드한 체스판 이미지 경로 사용
+
+for i in range(1, 9):
+    imageA = f'endtest\\end ({i}).png'  # 업로드한 체스판 이미지 경로 사용
     imageA = detect_and_crop_chessboard(imageA)
-    imageB = f'ChessRg\protest\\test ({i+1}).png'          # 두 번째 체스판 이미지 경로
+    imageB = f'endtest\\end ({i+1}).png'          # 두 번째 체스판 이미지 경로
     imageB = detect_and_crop_chessboard(imageB)
     detect_moves(imageA, imageB)
+
+imageA = 'KakaoTalk_20241117_182518349.jpg'
+
+a = detect_and_crop_chessboard(imageA)
+v = split_chessboard(a)
+resized_image = cv2.resize(v[1][1], (1000, 1000), interpolation=cv2.INTER_LINEAR)
+cv2.imshow('d',a)
+cv2.imshow(f'{1,1}',resized_image)
+cv2.waitKey(0)
+#for i in range(8):
+ #   for j in range(8):
+  #      cv2.imshow(f'{i,j}',a[i][j])
+   #     cv2.waitKey(0)
