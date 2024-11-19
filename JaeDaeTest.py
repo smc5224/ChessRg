@@ -384,8 +384,6 @@ def perform_promotion(piece, start, end):
 
     print(f"{piece}가 {start}에서 {end}로 이동한 후 {promoted_piece}(으)로 프로모션되었습니다.")
 
-
-
 def is_valid_move(piece, start, end):
     """
     체스 기물의 이동 규칙을 검사합니다. 캐슬링 조건 포함.
@@ -414,7 +412,6 @@ def is_valid_move(piece, start, end):
             else:  # 일반 이동
                 return ((row_diff == -1 and col_diff == 0 and board_state[end_row][end_col] is None) or
                         (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
-                        (row_diff == -1 and abs(col_diff) == -1 and board_state[end_row][end_col] is not None)
                         (row_diff == -1 and abs(col_diff) == 1 and board_state[end_row+1][end_col] is not None)) #앙파상 판별
 
         # 룩
@@ -467,7 +464,6 @@ def is_valid_move(piece, start, end):
             else:  # 일반 이동
                 return ((row_diff == 1 and col_diff == 0 and board_state[end_row][end_col] is None) or
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row][end_col] is not None) or
-                        (row_diff == 1 and abs(col_diff) == -1 and board_state[end_row][end_col] is not None)
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row-1][end_col] is not None)) #마지막줄 - 앙파상 판별
         # 룩
         elif piece == 'BR':
@@ -511,12 +507,9 @@ def is_valid_move(piece, start, end):
     # 정의되지 않은 기물인 경우
     return False
 
-# 이미지 경로 설정
-for i in range(1, 15):
+for i in range(1, 14):
     imageA = f'ChessRg\protest\\test ({i}).png'  # 업로드한 체스판 이미지 경로 사용
     imageA = detect_and_crop_chessboard(imageA)
     imageB = f'ChessRg\protest\\test ({i+1}).png'          # 두 번째 체스판 이미지 경로
     imageB = detect_and_crop_chessboard(imageB)
     detect_moves(imageA, imageB)
-    print(turn_count)
-    print(board_state)
