@@ -21,10 +21,24 @@ perspective_matrix = None  # 평면 보정을 위한 변환 행렬
 progress_frame_past = None #프레임 저장할 전역변수(전)
 progress_frame_now = None #프레임 저장할 전역변수(후)
 
+mock_data = [
+                    {
+                        'board status': [["BR", "BN", "BB", "BQ", "BK", "BB", "BN", "BR"],
+                                         ["BP", "BP", "BP", "BP", "BP", "BP", "BP", "BP"],
+                                         [None, None, None, None, None, None, None, None], 
+                                         [None, None, None, None, None, None, None, None],
+                                         [None, None, None, None, None, None, None, None],
+                                         [None, None, None, None, None, None, None, None],
+                                         ["WP", "WP", "WP", "WP", "WP", "WP", "WP", "WP"],
+                                         ["WR", "WN", "WB", "WQ", "WK", "WB", "WN", "WR"]],
+                        'notation': 'Initial Position',
+                    }
+                ]
+
+data = []
+data.append(mock_data)
 
 
-import cv2
-import numpy as np
 
 def setup_board_and_button(video):
     """
@@ -336,6 +350,7 @@ def detect_moves(initial_image, new_image):
 
     global board_state  # board_state를 전역 변수로 선언
     global turn_count   # turn_count를 전역 변수로 선언
+    global mock_data, data
 
     initial_board = split_chessboard(initial_image)
     new_board = split_chessboard(new_image)
@@ -363,9 +378,14 @@ def detect_moves(initial_image, new_image):
                     
                 else:       
                     # A에 기물이 있고 B는 비어 있는 경우
+                    
                     print(f"{piece_A}가 {Acell}에서 {Bcell}로 이동했습니다.")
                     board_state[Acell[0]][Acell[1]] = None  # A 위치를 빈칸으로
                     board_state[Bcell[0]][Bcell[1]] = piece_A  # B 위치로 이동
+                    mock_data['board status'] = board_state
+                    mock_data['notation'] = notation_transformation(piece_A, Acell, Bcell)
+                    data.append(mock_data)
+
             else : 
                 print(f"규칙오류 : {piece_A}가 {Acell}에서 {Bcell}로 이동할 수 없습니다.")
                 turn_count-=1
@@ -380,6 +400,9 @@ def detect_moves(initial_image, new_image):
                     print(f"{piece_B}가 {Bcell}에서 {Acell}로 이동했습니다.")
                     board_state[Bcell[0]][Bcell[1]] = None  # B 위치를 빈칸으로
                     board_state[Acell[0]][Acell[1]] = piece_B  # A 위치로 이동
+                    mock_data['board status'] = board_state
+                    mock_data['notation'] = notation_transformation(piece_B, Bcell, Acell)
+                    data.append(mock_data)
             else : 
                 print(f"규칙오류 : {piece_B}가 {Bcell}에서 {Acell}로 이동할 수 없습니다.")
                 turn_count-=1
@@ -428,13 +451,19 @@ def detect_moves(initial_image, new_image):
                     
                     
 
-                else:    
+                else:  
+                    board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
+                    board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로  
                     if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
                         print(f"백의 {start_piece}가 {endCell}에서 흑의 {end_piece}를 잡았습니다.")
+                        mock_data['board status'] = board_state
+                        mock_data['notation'] = notation_transformation(start_piece, startCell, endCell,is_move_kill=True, captured_piece=end_piece)
+                        data.append(mock_data)
                     else:  # 짝수 턴이면 흑이 백을 잡음
                         print(f"흑의 {start_piece}가 {endCell}에서 백의 {end_piece}를 잡았습니다.")
-                    board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
-                    board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
+                        mock_data['board status'] = board_state
+                        mock_data['notation'] = notation_transformation(start_piece, startCell, endCell,is_move_kill=True, captured_piece=end_piece)
+                        data.append(mock_data)
                     
 
             else :
@@ -452,8 +481,8 @@ def detect_moves(initial_image, new_image):
 
         white_king_side = {(7, 4), (7, 6), (7, 7), (7, 5)}
         white_queen_side = {(7, 4), (7, 2), (7, 0), (7, 3)}
-        black_king_side = {(0, 4), (0, 2), (0, 0), (0, 3)}
-        black_queen_side = {(0, 4), (0, 6), (0, 7), (0, 5)}
+        black_king_side = {(0, 4), (0, 6), (0, 7), (0, 5)}
+        black_queen_side = {(0, 4), (0, 2), (0, 0), (0, 3)}
 
         move_set = set(moves)
         if move_set == white_king_side or move_set == black_king_side:
@@ -473,56 +502,75 @@ def detect_moves(initial_image, new_image):
                 if abs(diffX) == 1 and abs(diffY) == 1:
                     # 대각선 관계가 있는 경우 나머지 좌표를 target으로 설정
                     target = moves[3 - i - j]  # 남은 하나의 인덱스
-                    if turn_count % 2 != 0:
-                        if (diffX == -1 and diffY == 1):
-                            En_type = 'angLW'
-                        elif (diffX == -1 and diffY == -1):
-                            En_type = 'angRW'
+                    if target.endswith("P"):
+                        if turn_count % 2 != 0:
+                            if (diffX == -1 and diffY == 1):
+                                En_type = 'angLW'
+                            elif (diffX == -1 and diffY == -1):
+                                En_type = 'angRW'
+                        else:
+                            if (diffX == -1 and diffY == 1):
+                                En_type = 'angRB'
+                            elif (diffX == -1 and diffY == -1):
+                                En_type = 'angLB'
                     else:
-                        if (diffX == -1 and diffY == 1):
-                            En_type = 'angRB'
-                        elif (diffX == -1 and diffY == -1):
-                            En_type = 'angLB'
-
+                        print("규칙오류 : 앙파상은 폰끼리만 가능합니다")
+                else:
+                    print("인식오류: 앙파상이 아닌 3칸인식")
         perform_En_passant(En_type, target)
 
     else:
         print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
+        print("%d",len(moves))
+
 
 def perform_castling(castling_type, move_set):
     global board_state
-    global turn_count
+    global turn_count, is_move_Castling,mock_data,data
     print(board_state)
+    print(move_set)
     if castling_type == "queen":
-        if (7,4) in move_set :  # 화이트 퀸 사이드
+        if (7,2) in move_set :  # 화이트 퀸 사이드
             if is_valid_move("WK", (7,4), (7,2)):
                 board_state[7][4], board_state[7][2] = None, "WK"
                 board_state[7][0], board_state[7][3] = None, "WR"
+                mock_data['board status'] = board_state
+                mock_data['notation'] = notation_transformation('WK', (7,4), (7,2), is_move_Castling==True)
+                data.append(mock_data)
                 turn_count += 1  # 캐슬링 후 턴 증가
             else: 
                 print("규칙오류 : 캐슬링이 불가능합니다.")
                 turn_count-=1
-        elif (0, 4) in move_set:  # 블랙 퀸 사이드
+        elif (0, 2) in move_set:  # 블랙 퀸 사이드
             if is_valid_move("BK", (0,4), (0,2)):
                 board_state[0][4], board_state[0][2] = None, "BK"
                 board_state[0][0], board_state[0][3] = None, "BR"
+                mock_data['board status'] = board_state
+                mock_data['notation'] = notation_transformation('BK', (0,4), (0,2), is_move_Castling==True)
+                data.append(mock_data)
                 turn_count += 1  # 캐슬링 후 턴 증가
             else: 
                 print("규칙오류 : 캐슬링이 불가능합니다.")
                 turn_count-=1
     elif castling_type == "king":
-        if (7, 4) in move_set:  # 화이트 킹 사이드
+        if (7, 6) in move_set:  # 화이트 킹 사이드
             if is_valid_move("WK", (7,4), (7,6)):
                 board_state[7][4], board_state[7][6] = None, "WK"
                 board_state[7][7], board_state[7][5] = None, "WR"
+                mock_data['board status'] = board_state
+                mock_data['notation'] = notation_transformation('WK', (7,4), (7,6), is_move_Castling==True)
+                data.append(mock_data)
                 turn_count += 1  # 캐슬링 후 턴 증가
             else: 
                 print("규칙오류 : 캐슬링이 불가능합니다.")
                 turn_count-=1
-        elif (0, 4) in move_set:  # 블랙 킹 사이드
+        elif (0, 6) in move_set:  # 블랙 킹 사이드
             if is_valid_move("BK", (0,4), (0,6)):
                 board_state[0][4], board_state[0][6] = None, "BK"
                 board_state[0][7], board_state[0][5] = None, "BR"
+                mock_data['board status'] = board_state
+                mock_data['notation'] = notation_transformation('BK', (0,4), (0,6), is_move_Castling==True)
+                data.append(mock_data)
                 turn_count += 1  # 캐슬링 후 턴 증가
             else: 
                 print("규칙오류 : 캐슬링이 불가능합니다.")
@@ -530,6 +578,7 @@ def perform_castling(castling_type, move_set):
 
     
     # 체스 기물 이동 규칙을 확인하는 함수
+
 
 def perform_En_passant(En_passant_type, En_passant_target):
     """
@@ -542,7 +591,7 @@ def perform_En_passant(En_passant_type, En_passant_target):
     :param En_passant_target: 잡히는 상대 기물의 좌표 (row, col)
     """
     global board_state
-    global turn_count
+    global turn_count,mock_data,data
 
     target_row, target_col = En_passant_target
 
@@ -555,6 +604,12 @@ def perform_En_passant(En_passant_type, En_passant_target):
             board_state[move_row][move_col] = "WP"
             # 흑 폰 제거
             board_state[target_row][target_col] = None
+            mock_data['board status'] = board_state
+            start_cell = (target_row,target_col - 1)
+            end_cell = (move_row,move_col)
+            mock_data['notation'] = notation_transformation("WP", start_cell, end_cell,is_move_kill=True, is_move_en_passant=True, captured_piece='BP'  )
+            data.append(mock_data)
+            
 
     elif En_passant_type == "angRW":  # 백 폰이 왼쪽 대각선으로 이동
         # 백 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 위 칸
@@ -565,6 +620,10 @@ def perform_En_passant(En_passant_type, En_passant_target):
             board_state[move_row][move_col] = "WP"
             # 흑 폰 제거
             board_state[target_row][target_col] = None
+            start_cell = (target_row,target_col + 1)
+            end_cell = (move_row,move_col)
+            mock_data['notation'] = notation_transformation("WP", start_cell, end_cell,is_move_kill=True, is_move_en_passant=True, captured_piece='BP')
+            data.append(mock_data)
 
     elif En_passant_type == "angLB":  # 흑 폰이 오른쪽 대각선으로 이동
         # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
@@ -575,7 +634,10 @@ def perform_En_passant(En_passant_type, En_passant_target):
             board_state[move_row][move_col] = "BP"
             # 백 폰 제거
             board_state[target_row][target_col] = None
-
+            start_cell = (target_row,target_col - 1)
+            end_cell = (move_row,move_col)
+            mock_data['notation'] = notation_transformation("BP", start_cell, end_cell,is_move_kill=True, is_move_en_passant=True, captured_piece='WP')
+            data.append(mock_data)
     elif En_passant_type == "angRB":  # 흑 폰이 왼쪽 대각선으로 이동
         # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
         move_row, move_col = target_row + 1, target_col
@@ -585,11 +647,15 @@ def perform_En_passant(En_passant_type, En_passant_target):
             board_state[move_row][move_col] = "BP"
             # 백 폰 제거
             board_state[target_row][target_col] = None
-
+            start_cell = (target_row,target_col + 1)
+            end_cell = (move_row,move_col)
+            mock_data['notation'] = notation_transformation("BP", start_cell, end_cell,is_move_kill=True, is_move_en_passant=True, captured_piece='WP')
+            data.append(mock_data)
     else:
         print("Invalid En Passant type!")
 
     turn_count += 1  # 앙파상 후 턴 증가
+
 
 def perform_promotion(piece, start, end):
     global board_state
@@ -625,6 +691,7 @@ def perform_promotion(piece, start, end):
 
     print(f"{piece}가 {start}에서 {end}로 이동한 후 {promoted_piece}(으)로 프로모션되었습니다.")
 
+
 def is_valid_move(piece, start, end):
     """
     체스 기물의 이동 규칙을 검사합니다. 캐슬링 조건 포함.
@@ -657,9 +724,9 @@ def is_valid_move(piece, start, end):
 
         # 룩
         elif piece == 'WR':
-            if start[0]==0 and start[1]==0:
+            if start[0]==7 and start[1]==0:
                 is_move_Castling[0][0]+=1
-            if start[0]==0 and start[1]==7:
+            if start[0]==7 and start[1]==7:
                 is_move_Castling[0][2]+=1
             return (row_diff == 0 and col_diff != 0) or (row_diff != 0 and col_diff == 0)
         # 나이트
@@ -708,9 +775,9 @@ def is_valid_move(piece, start, end):
                         (row_diff == 1 and abs(col_diff) == 1 and board_state[end_row-1][end_col] is not None)) #마지막줄 - 앙파상 판별
         # 룩
         elif piece == 'BR':
-            if start[0]==7 and start[1]==0:
+            if start[0]==0 and start[1]==0:
                 is_move_Castling[1][0]+=1
-            if start[0]==7 and start[1]==7:
+            if start[0]==0 and start[1]==7:
                 is_move_Castling[1][2]+=1
             return (row_diff == 0 and col_diff != 0) or (row_diff != 0 and col_diff == 0)
         # 나이트
@@ -748,6 +815,7 @@ def is_valid_move(piece, start, end):
     # 정의되지 않은 기물인 경우
     return False
 
+
 def video_play(video):
 
     global initial_button_image, button_coordinates, turn_count_button, progress_frame_past, progress_frame_now
@@ -763,6 +831,67 @@ def video_play(video):
                 break
             elif is_game_end =='B':
                 break
+
+def notation_transformation(
+    piece,
+    startcell,
+    endcell,
+    is_move_kill=False,
+    is_move_castling=False,
+    is_move_en_passant=False,
+    is_move_promotion=False,
+    promotion_piece=None,
+    captured_piece=None
+):
+    """
+    체스 이동을 커스텀 기보법으로 변환하는 함수.
+
+    Parameters:
+    - color (str): 'W' 또는 'B' (백 또는 흑)
+    - piece (str): 이동하는 체스 말의 약자 ('K', 'Q', 'R', 'B', 'N', 'P')
+    - startcell (tuple): 시작 위치 (row, col) 0-7 인덱스 (0이 상단, 7이 하단)
+    - endcell (tuple): 도착 위치 (row, col) 0-7 인덱스
+    - is_move_kill (bool): 잡기 여부
+    - is_move_castling (bool): 캐슬링 여부
+    - is_move_en_passant (bool): 앙파상 여부
+    - is_move_promotion (bool): 승격 여부
+    - promotion_piece (str): 승격 시 선택한 말의 약자 (예: 'Q', 'R', 'B', 'N')
+    - captured_piece (str): 잡힌 상대 말의 약자 (예: 'BN')
+
+    Returns:
+    - str: 변환된 기보 문자열
+    """
+    color = piece[:1]
+    piece = piece[1:]
+    # 체스판 좌표 변환 (0-7 인덱스를 'a1' - 'h8'으로 변환)
+    def cell_to_notation(cell):
+        row, col = cell
+        return chr(ord('a') + col) + str(8 - row)
+
+    start_notation = cell_to_notation(startcell)
+    end_notation = cell_to_notation(endcell)
+
+    if is_move_castling:
+        if end_notation in ['g1', 'g8']:
+            return f"{color} kingside castling"
+        elif end_notation in ['c1', 'c8']:
+            return f"{color} queenside castling"
+    move_notation = ""
+
+    if is_move_en_passant:
+        # 앙파상: e.p. + 이동 정보 + kill + 상대 말
+        move_notation += "e.p. "
+
+    # 색상과 말의 약자
+    move_notation += f"{color}{piece} {start_notation} {end_notation}"
+
+    if is_move_kill:
+        move_notation += f" kill {captured_piece}"
+
+    if is_move_promotion and promotion_piece:
+        move_notation += f" {piece} to {color}{promotion_piece}"
+
+    return move_notation
 
 
 cap = cv2.VideoCapture('video/tes3.mp4')
