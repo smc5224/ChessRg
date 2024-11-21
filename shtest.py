@@ -2,11 +2,9 @@ import cv2
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 
-
-
-
 is_move_Castling = [[0,0,0],[0,0,0]]
 turn_count = 1  # 턴을 관리할 변수
+turn_count_button = 1
 board_state = [
     ["BR", "BN", "BB", "BQ", "BK", "BB", "BN", "BR"],  # 백 기물의 첫 번째 줄
     ["BP", "BP", "BP", "BP", "BP", "BP", "BP", "BP"],  # 백 폰의 줄
@@ -17,9 +15,232 @@ board_state = [
     ["WP", "WP", "WP", "WP", "WP", "WP", "WP", "WP"],  # 흑 폰의 줄
     ["WR", "WN", "WB", "WQ", "WK", "WB", "WN", "WR"]   # 흑 기물의 첫 번째 줄
 ]
+initial_button_image = None  # 초기 버튼 이미지 (비교 기준)
+button_coordinates = None  # 버튼 영역 좌표 (x, y, width, height)
+perspective_matrix = None  # 평면 보정을 위한 변환 행렬
+progress_frame_past = None #프레임 저장할 전역변수(전)
+progress_frame_now = None #프레임 저장할 전역변수(후)
 
 
 
+import cv2
+import numpy as np
+
+def setup_board_and_button(video):
+    """
+    체스판과 버튼 영역을 설정하는 함수.
+    사용자가 마우스로 점 4개를 클릭해 평면 보정 후 버튼 영역을 지정함.
+    """
+    global initial_button_image, button_coordinates, perspective_matrix, progress_frame_past, progress_frame_now
+
+    # 평면 보정을 위한 변수 초기화
+    selected_point_count = 0  # 선택된 점의 개수 (최대 4개)
+    selected_points = np.zeros((4, 2), dtype=np.float32)  # 선택된 점의 좌표 저장
+    perspective_matrix = None  # 평면 보정을 위한 변환 행렬 초기화
+
+    # 버튼 영역 초기값
+    button_rect = [50, 50, 200, 200]  # 버튼 사각형의 초기 좌표와 크기 (x, y, width, height)
+    is_dragging = False  # 버튼을 드래그 중인지 여부
+    is_resizing = False  # 버튼 크기를 조정 중인지 여부
+    start_drag_point = None  # 드래그 시작 지점
+    corner_detection_size = 15  # 버튼 크기 조정용 모서리 영역 크기
+
+    def draw_rectangle(image, rect):
+        """
+        사각형과 모서리를 그리는 함수.
+        """
+        x, y, w, h = rect
+        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)  # 버튼 사각형
+        cv2.rectangle(image, (x + w - corner_detection_size, y + h - corner_detection_size),
+                      (x + w, y + h), (0, 0, 255), -1)  # 모서리 크기 조정 핸들
+
+    def is_in_corner(x, y, rect):
+        """
+        좌표 (x, y)가 사각형의 크기 조정용 모서리 영역에 있는지 확인.
+        """
+        rect_x, rect_y, rect_width, rect_height = rect
+        return (rect_x + rect_width - corner_detection_size <= x <= rect_x + rect_width and
+                rect_y + rect_height - corner_detection_size <= y <= rect_y + rect_height)
+
+    def on_mouse(event, x, y, flags, param):
+        """
+        마우스 이벤트 처리 콜백 함수.
+        """
+        nonlocal is_dragging, is_resizing, start_drag_point, button_rect, selected_point_count, selected_points
+        global perspective_matrix
+
+        if perspective_matrix is None and selected_point_count < 4:  # 평면 보정을 위한 점 선택
+            if event == cv2.EVENT_LBUTTONDOWN:
+                selected_points[selected_point_count] = [x, y]
+                selected_point_count += 1
+                if selected_point_count == 4:  # 점 4개가 선택되면 평면 보정 수행
+                    destination_points = np.array([
+                        [0, 0],
+                        [300, 0],
+                        [300, 300],
+                        [0, 300]
+                    ], dtype=np.float32)
+                    perspective_matrix = cv2.getPerspectiveTransform(selected_points, destination_points)
+
+        elif perspective_matrix is not None:  # 버튼 영역 조정 (평면 보정 후)
+            if event == cv2.EVENT_LBUTTONDOWN:  # 마우스 클릭
+                if is_in_corner(x, y, button_rect):  # 모서리를 클릭한 경우
+                    is_resizing = True
+                    start_drag_point = (x, y)
+                elif button_rect[0] <= x <= button_rect[0] + button_rect[2] and button_rect[1] <= y <= button_rect[1] + button_rect[3]:  # 버튼 내부 클릭
+                    is_dragging = True
+                    start_drag_point = (x, y)
+
+            elif event == cv2.EVENT_MOUSEMOVE:  # 마우스 이동
+                if is_dragging:  # 버튼 이동
+                    dx, dy = x - start_drag_point[0], y - start_drag_point[1]
+                    button_rect[0] += dx
+                    button_rect[1] += dy
+                    start_drag_point = (x, y)
+                elif is_resizing:  # 버튼 크기 조정
+                    dx, dy = x - start_drag_point[0], y - start_drag_point[1]
+                    button_rect[2] += dx
+                    button_rect[3] += dy
+                    button_rect[2] = max(20, button_rect[2])  # 최소 너비 제한
+                    button_rect[3] = max(20, button_rect[3])  # 최소 높이 제한
+                    start_drag_point = (x, y)
+
+            elif event == cv2.EVENT_LBUTTONUP:  # 마우스 버튼 해제
+                is_dragging = False
+                is_resizing = False
+
+    # 마우스 콜백 설정
+    cv2.namedWindow('Video')
+    cv2.setMouseCallback('Video', on_mouse)
+
+    ret, frame = video.read()
+    if not ret:
+        return
+
+    original_frame = frame.copy()
+
+    while True:
+        if not ret:
+            break
+
+        # 이전 프레임을 복원 (사각형 그리기 전)
+        frame = original_frame.copy()
+
+        # 점 찍기 표시
+        for i in range(selected_point_count):
+            cv2.circle(frame, (int(selected_points[i, 0]), int(selected_points[i, 1])), 5, (0, 0, 255), -1)
+
+        if perspective_matrix is not None:  # 평면 보정 후
+            warped_frame = cv2.warpPerspective(frame, perspective_matrix, (300, 300))
+            progress_frame_past = warped_frame
+            cv2.imshow('Board View', warped_frame)  # 보정된 체스판 출력
+            draw_rectangle(frame, button_rect)
+        # 사각형을 그린다 (사각형을 그리기 전에 원래 이미지로 복원된 상태에서 그리기)
+        
+
+        # 원본 영상 출력
+        cv2.imshow('Video', frame)
+        
+        key = cv2.waitKey(1)
+        if key == 13 and perspective_matrix is not None:  # Enter 키로 버튼 영역 설정 완료
+            x, y, w, h = button_rect
+            initial_button_image = frame[y:y + h, x:x + w]  # 버튼 초기 이미지 저장
+            button_coordinates = button_rect
+            break
+        elif key == 27:  # ESC 키로 종료
+            break
+
+    cv2.destroyWindow("Video")
+
+
+def detect_turn_change(video):
+    """
+    버튼 상태 변화(턴 변경)를 감지하는 함수.
+    상태 전이 로직을 활용하여 턴 변경을 감지.
+    """
+    global initial_button_image, button_coordinates, turn_count_button
+
+    if initial_button_image is None or button_coordinates is None:
+        print("버튼 초기 상태가 설정되지 않았습니다.")
+        return False
+
+    # 초기 상태 설정
+    previous_state = "VISIBLE"  # 처음에는 버튼이 보이는 상태
+    current_state = "VISIBLE"
+
+    consecutive_hidden_count = 0  # 버튼이 가려진 상태가 연속적으로 몇 프레임 유지되는지 카운트
+    consecutive_visible_count = 0  # 버튼이 보이는 상태가 연속적으로 몇 프레임 유지되는지 카운트
+    threshold_count = 12  # 상태 전이를 결정하는데 필요한 연속 프레임 수 (중간 값으로 조정)
+    delay_after_transition = 5  # 전이 후 몇 프레임 동안 상태를 확인하지 않을 지연 프레임 수
+    delay_counter = 0
+
+    while True:
+        ret, frame = video.read()
+        if not ret:
+            break
+
+        # 지연 카운터가 0보다 크면 상태 검사를 잠시 생략
+        if delay_counter > 0:
+            delay_counter -= 1
+            continue
+
+        # 버튼 영역 추출
+        x, y, w, h = button_coordinates
+        current_button_region = frame[y:y + h, x:x + w]
+
+        # 버튼 상태 비교 (SSIM 이용)
+        current_gray = cv2.cvtColor(current_button_region, cv2.COLOR_BGR2GRAY)
+        initial_gray = cv2.cvtColor(initial_button_image, cv2.COLOR_BGR2GRAY)
+        similarity, _ = ssim(initial_gray, current_gray, full=True)
+        # 상태 판단 (임계값 기준)
+        if similarity < 0.5:  # 임계값을 0.85로 설정하여 더 민감하게 반응
+            current_state = "HIDDEN"
+            consecutive_hidden_count += 1
+            consecutive_visible_count = 0  # 보이는 상태 카운터 초기화
+        else:
+            current_state = "VISIBLE"
+            consecutive_visible_count += 1
+            consecutive_hidden_count = 0  # 가려진 상태 카운터 초기화
+
+        # 상태 전이 감지 (연속적인 상태 변화 확인)
+        if previous_state == "VISIBLE" and consecutive_hidden_count >= threshold_count:
+            turn_count_button += 1  # 전역 변수로 턴 증
+            previous_state = "HIDDEN"
+            consecutive_hidden_count = 0
+            consecutive_visible_count = 0  # 상태 변경 후 초기화
+            delay_counter = delay_after_transition  # 상태 전이 후 지연 프레임 설정
+
+            # 턴이 바뀌면 True 반환하고 루프 종료
+            return True, frame
+
+        elif previous_state == "HIDDEN" and consecutive_visible_count >= threshold_count:
+            previous_state = "VISIBLE"
+            consecutive_visible_count = 0
+            consecutive_hidden_count = 0  # 상태 변경 후 초기화
+            delay_counter = delay_after_transition  # 상태 전이 후 지연 프레임 설정
+
+        # 버튼 영역 표시
+        cv2.imshow('Button View', current_button_region)
+        if cv2.waitKey(1) == 27:  # ESC 키로 종료
+            break
+
+
+def process_frame(frame):
+    """
+    턴이 변경될 때마다 현재 체스판 상태를 처리하는 함수.
+    """
+    # 체스판을 분할하거나, 현재 상태를 분석하는 등의 작업을 수행
+    global progress_frame_past, progress_frame_now, perspective_matrix
+    if progress_frame_now is not None:
+        progress_frame_past = progress_frame_now
+        progress_frame_now = cv2.warpPerspective(frame, perspective_matrix, (300, 300))
+    else :
+
+        progress_frame_now = cv2.warpPerspective(frame, perspective_matrix, (300, 300))
+    cv2.imshow('now',progress_frame_now)   
+    
+
+""" 보드 자르는함수(큰사각형으로)
 # 사진을 체스판으로 자르기
 def detect_and_crop_chessboard(image_path):
     # 이미지 불러오기
@@ -79,9 +300,10 @@ def detect_and_crop_chessboard(image_path):
         return cropped_chessboard
     else:
         print("체스판을 인식하지 못했습니다.")
-        return None
-# 체스판을 8x8로 자르고 리스트로 만들기 ( (i, j) i는 세로축, j는 가로축 / 왼쪽 위부터 0 )
-def split_chessboard(image):
+        return None """
+
+
+def split_chessboard(image):    # 체스판을 8x8로 자르고 리스트로 만들기 ( (i, j) i는 세로축, j는 가로축 / 왼쪽 위부터 0 )
     board_size = 8  # 체스판은 8x8
     height, width = image.shape[:2]
     cell_width = width // board_size
@@ -99,7 +321,7 @@ def split_chessboard(image):
 
     return cells
 # 
-def 
+
 def compare_cells(cell1, cell2):
     # Grayscale로 변환
     cell1_gray = cv2.cvtColor(cell1, cv2.COLOR_BGR2GRAY)
@@ -108,6 +330,7 @@ def compare_cells(cell1, cell2):
     # 구조적 유사도 계산
     score, _ = ssim(cell1_gray, cell2_gray, full=True)
     return score
+
 
 def detect_moves(initial_image, new_image):
 
@@ -192,10 +415,17 @@ def detect_moves(initial_image, new_image):
                 elif end_piece.endswith('K'):       #게임 끝낫는지 확인
                     if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
                         print(f"백의 {start_piece}가 {endCell}에서 흑의 {end_piece}를 잡으며 백이 승리합니다.")
+                        board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
+                        board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
+                        turn_count += 1
+                        return 'W'
                     else:  # 짝수 턴이면 흑이 백을 잡음
                         print(f"흑의 {start_piece}가 {endCell}에서 백의 {end_piece}를 잡으며 흑이 승리합니다.")
-                    board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
-                    board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
+                        board_state[endCell[0]][endCell[1]] = start_piece  # B 위치로 A의 기물 이동
+                        board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로
+                        turn_count += 1
+                        return 'B'
+                    
                     
 
                 else:    
@@ -229,11 +459,9 @@ def detect_moves(initial_image, new_image):
         if move_set == white_king_side or move_set == black_king_side:
             print("킹 사이드 캐슬링이 감지되었습니다.")
             perform_castling("king", move_set)
-            return
         elif move_set == white_queen_side or move_set == black_queen_side:
             print("퀸 사이드 캐슬링이 감지되었습니다.")
             perform_castling("queen", move_set)
-            return
         
     elif len(moves) == 3:
         for i in range(3):
@@ -264,9 +492,9 @@ def detect_moves(initial_image, new_image):
 def perform_castling(castling_type, move_set):
     global board_state
     global turn_count
-
+    print(board_state)
     if castling_type == "queen":
-        if (7, 4) in move_set:  # 화이트 퀸 사이드
+        if (7,4) in move_set :  # 화이트 퀸 사이드
             if is_valid_move("WK", (7,4), (7,2)):
                 board_state[7][4], board_state[7][2] = None, "WK"
                 board_state[7][0], board_state[7][3] = None, "WR"
@@ -520,23 +748,26 @@ def is_valid_move(piece, start, end):
     # 정의되지 않은 기물인 경우
     return False
 
+def video_play(video):
 
-for i in range(1, 9):
-    imageA = f'endtest\\end ({i}).png'  # 업로드한 체스판 이미지 경로 사용
-    imageA = detect_and_crop_chessboard(imageA)
-    imageB = f'endtest\\end ({i+1}).png'          # 두 번째 체스판 이미지 경로
-    imageB = detect_and_crop_chessboard(imageB)
-    detect_moves(imageA, imageB)
+    global initial_button_image, button_coordinates, turn_count_button, progress_frame_past, progress_frame_now
+    
+    setup_board_and_button(video)
+    
+    while True:
+        turnchange, frame = detect_turn_change(video)
+        if turnchange:
+            process_frame(frame)
+            is_game_end = detect_moves(progress_frame_past,progress_frame_now)
+            if is_game_end =='W':
+                break
+            elif is_game_end =='B':
+                break
 
-imageA = 'KakaoTalk_20241117_182518349.jpg'
 
-a = detect_and_crop_chessboard(imageA)
-v = split_chessboard(a)
-resized_image = cv2.resize(v[1][1], (1000, 1000), interpolation=cv2.INTER_LINEAR)
-cv2.imshow('d',a)
-cv2.imshow(f'{1,1}',resized_image)
-cv2.waitKey(0)
-#for i in range(8):
- #   for j in range(8):
-  #      cv2.imshow(f'{i,j}',a[i][j])
-   #     cv2.waitKey(0)
+cap = cv2.VideoCapture('video/tes3.mp4')
+
+
+video_play(cap)
+
+

@@ -1,212 +1,215 @@
 import cv2
 import numpy as np
 from skimage.metrics import structural_similarity as compare_ssim
+import time
 
 # 전역 변수
-initial_button_state = None  # 버튼 초기 상태 저장
-button_rect = None  # 버튼 영역 좌표 저장
-pers_mat = None  # 평면 보정 행렬 초기화
+initial_button_image = None  # 초기 버튼 이미지 (비교 기준)
+button_coordinates = None  # 버튼 영역 좌표 (x, y, width, height)
+perspective_matrix = None  # 평면 보정을 위한 변환 행렬
 
 
-def setup_board_and_button(video_source=0, output_size=300):
+def setup_board_and_button(video):
     """
-    마우스로 점 4개를 찍어 평면 보정을 수행한 후,
-    드래그 및 크기 조정을 통해 버튼 영역을 설정.
-
-    Parameters:
-    - video_source: 동영상 소스 (파일 경로 또는 웹캠).
-
-    Updates:
-    - initial_button_state: 초기 버튼 상태 저장.
-    - button_rect: 버튼 영역 좌표 저장.
+    체스판과 버튼 영역을 설정하는 함수.
+    사용자가 마우스로 점 4개를 클릭해 평면 보정 후 버튼 영역을 지정함.
     """
-    global initial_button_state, button_rect, pers_mat  # 전역 변수 선언
+    global initial_button_image, button_coordinates, perspective_matrix  # 전역 변수 선언
 
-    cnt = 0
-    src_pts = np.zeros((4, 2), dtype=np.float32)
-    pers_mat = None  # 명시적으로 초기화
+    # 평면 보정을 위한 변수 초기화
+    selected_point_count = 0  # 선택된 점의 개수 (최대 4개)
+    selected_points = np.zeros((4, 2), dtype=np.float32)  # 선택된 점의 좌표 저장
+    perspective_matrix = None  # 평면 보정을 위한 변환 행렬 초기화
 
-    rect = [50, 50, 200, 200]  # 초기 사각형
-    dragging = False
-    resizing = False
-    start_point = None
-    corner_size = 15  # 모서리 감지 영역 크기
+    # 버튼 영역 초기값
+    button_rect = [50, 50, 200, 200]  # 버튼 사각형의 초기 좌표와 크기 (x, y, width, height)
+    is_dragging = False  # 버튼을 드래그 중인지 여부
+    is_resizing = False  # 버튼 크기를 조정 중인지 여부
+    start_drag_point = None  # 드래그 시작 지점
+    corner_detection_size = 15  # 버튼 크기 조정용 모서리 영역 크기
 
     def draw_rectangle(image, rect):
+        """
+        사각형과 모서리를 그리는 함수.
+        """
         x, y, w, h = rect
-        # 사각형 그리기
-        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        # 오른쪽 아래 코너 표시
-        cv2.rectangle(image, (x + w - corner_size, y + h - corner_size),
-                      (x + w, y + h), (0, 0, 255), -1)
+        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)  # 버튼 사각형
+        cv2.rectangle(image, (x + w - corner_detection_size, y + h - corner_detection_size),
+                      (x + w, y + h), (0, 0, 255), -1)  # 모서리 크기 조정 핸들
 
     def is_in_corner(x, y, rect):
         """
-        (x, y)가 사각형의 오른쪽 아래 모서리 영역 안에 있는지 확인.
+        좌표 (x, y)가 사각형의 크기 조정용 모서리 영역에 있는지 확인.
         """
-        rx, ry, rw, rh = rect
-        return (rx + rw - corner_size <= x <= rx + rw and
-                ry + rh - corner_size <= y <= ry + rh)
+        rect_x, rect_y, rect_width, rect_height = rect
+        return (rect_x + rect_width - corner_detection_size <= x <= rect_x + rect_width and
+                rect_y + rect_height - corner_detection_size <= y <= rect_y + rect_height)
 
     def on_mouse(event, x, y, flags, param):
-        nonlocal dragging, resizing, start_point, rect, cnt, src_pts
-        global pers_mat  # 함수 내부에서 전역 변수 사용 선언
+        """
+        마우스 이벤트 처리 콜백 함수.
+        """
+        nonlocal is_dragging, is_resizing, start_drag_point, button_rect, selected_point_count, selected_points
+        global perspective_matrix
 
-        if pers_mat is None and cnt < 4:  # 점 찍기
+        if perspective_matrix is None and selected_point_count < 4:  # 평면 보정을 위한 점 선택
             if event == cv2.EVENT_LBUTTONDOWN:
-                src_pts[cnt] = [x, y]
-                cnt += 1
-                if cnt == 4:  # 점 4개 선택 완료
-                    dst_pts = np.array([
+                selected_points[selected_point_count] = [x, y]
+                selected_point_count += 1
+                if selected_point_count == 4:  # 점 4개가 선택되면 평면 보정 수행
+                    destination_points = np.array([
                         [0, 0],
-                        [output_size - 1, 0],
-                        [output_size - 1, output_size - 1],
-                        [0, output_size - 1]
+                        [300, 0],
+                        [300 , 300],
+                        [0, 300]
                     ], dtype=np.float32)
-                    pers_mat = cv2.getPerspectiveTransform(src_pts, dst_pts)
+                    perspective_matrix = cv2.getPerspectiveTransform(selected_points, destination_points)
 
-        elif pers_mat is not None:  # 사각형 조정
-            if event == cv2.EVENT_LBUTTONDOWN:  # 클릭 시작
-                if is_in_corner(x, y, rect):  # 모서리 클릭
-                    resizing = True
-                    start_point = (x, y)
-                elif rect[0] <= x <= rect[0] + rect[2] and rect[1] <= y <= rect[1] + rect[3]:  # 사각형 내부 클릭
-                    dragging = True
-                    start_point = (x, y)
+        elif perspective_matrix is not None:  # 버튼 영역 조정 (평면 보정 후)
+            if event == cv2.EVENT_LBUTTONDOWN:  # 마우스 클릭
+                if is_in_corner(x, y, button_rect):  # 모서리를 클릭한 경우
+                    is_resizing = True
+                    start_drag_point = (x, y)
+                elif button_rect[0] <= x <= button_rect[0] + button_rect[2] and button_rect[1] <= y <= button_rect[1] + button_rect[3]:  # 버튼 내부 클릭
+                    is_dragging = True
+                    start_drag_point = (x, y)
 
-            elif event == cv2.EVENT_MOUSEMOVE:  # 드래그 중
-                if dragging:  # 사각형 이동
-                    dx, dy = x - start_point[0], y - start_point[1]
-                    rect[0] += dx
-                    rect[1] += dy
-                    start_point = (x, y)
-                elif resizing:  # 크기 조정
-                    dx, dy = x - start_point[0], y - start_point[1]
-                    rect[2] += dx
-                    rect[3] += dy
-                    rect[2] = max(20, rect[2])  # 최소 너비 제한
-                    rect[3] = max(20, rect[3])  # 최소 높이 제한
-                    start_point = (x, y)
+            elif event == cv2.EVENT_MOUSEMOVE:  # 마우스 이동
+                if is_dragging:  # 버튼 이동
+                    dx, dy = x - start_drag_point[0], y - start_drag_point[1]
+                    button_rect[0] += dx
+                    button_rect[1] += dy
+                    start_drag_point = (x, y)
+                elif is_resizing:  # 버튼 크기 조정
+                    dx, dy = x - start_drag_point[0], y - start_drag_point[1]
+                    button_rect[2] += dx
+                    button_rect[3] += dy
+                    button_rect[2] = max(20, button_rect[2])  # 최소 너비 제한
+                    button_rect[3] = max(20, button_rect[3])  # 최소 높이 제한
+                    start_drag_point = (x, y)
 
-            elif event == cv2.EVENT_LBUTTONUP:  # 드래그 종료
-                dragging = False
-                resizing = False
+            elif event == cv2.EVENT_LBUTTONUP:  # 마우스 버튼 해제
+                is_dragging = False
+                is_resizing = False
 
-    cap = cv2.VideoCapture(video_source)
-    if not cap.isOpened():
-        print("동영상을 열 수 없습니다.")
-        return
-
+    # 마우스 콜백 설정
     cv2.namedWindow('Video')
     cv2.setMouseCallback('Video', on_mouse)
 
     while True:
-        ret, frame = cap.read()
+        ret, frame = video.read()
         if not ret:
             break
 
-        # 점 표시
-        for i in range(cnt):
-            cv2.circle(frame, (int(src_pts[i, 0]), int(src_pts[i, 1])), 5, (0, 0, 255), -1)
+        # 점 찍기 표시
+        for i in range(selected_point_count):
+            cv2.circle(frame, (int(selected_points[i, 0]), int(selected_points[i, 1])), 5, (0, 0, 255), -1)
 
-        # 평면 보정 결과 표시
-        if pers_mat is not None:
-            warped_frame = cv2.warpPerspective(frame, pers_mat, (output_size, output_size))
-            cv2.imshow('Board View', warped_frame)
+        if perspective_matrix is not None:  # 평면 보정 후
+            warped_frame = cv2.warpPerspective(frame, perspective_matrix, (300, 300))           
+            cv2.imshow('Board View', warped_frame)  # 보정된 체스판 출력
+            draw_rectangle(frame, button_rect)  # 버튼 영역 표시
 
-            # 초기 버튼 상태 저장
-            if initial_button_state is None:
-                x, y, w, h = rect
-                initial_button_state = frame[y:y + h, x:x + w]  # 초기 버튼 상태 저장
-
-            # 사각형 표시
-            draw_rectangle(frame, rect)
-
-        cv2.imshow('Video', frame)
+        cv2.imshow('Video', frame)  # 원본 영상 출력
         key = cv2.waitKey(1)
-        if key == 13 and pers_mat is not None:  # Enter 키로 좌표 저장
-            button_rect = rect
+        if key == 13 and perspective_matrix is not None:  # Enter 키로 버튼 영역 설정 완료
+            x, y, w, h = button_rect
+            initial_button_image = frame[y:y + h, x:x + w]  # 버튼 초기 이미지 저장
+            button_coordinates = button_rect
             break
         elif key == 27:  # ESC 키로 종료
             break
 
-    cap.release()
-    cv2.destroyAllWindows()
+    
+    cv2.destroyWindow("Video")
 
+    
 
-
-def detect_turn_change(video_source, threshold=0.9):
+def detect_turn_change(video):
     """
-    버튼 영역의 변화를 감지하여 턴이 넘어갔는지 판단.
-
-    Parameters:
-    - video_source: 동영상 파일 경로 또는 웹캠 (0은 기본 웹캠).
-    - threshold: SSIM 유사도 임계값.
-
-    Returns:
-    - bool: 변화 감지 여부.
+    버튼 상태 변화(턴 변경)를 감지하는 함수.
+    상태 전이 로직을 활용하여 턴 변경을 감지.
     """
-    global initial_button_state, button_rect, pers_mat
+    global initial_button_image, button_coordinates
 
-    if initial_button_state is None or button_rect is None:
+    if initial_button_image is None or button_coordinates is None:
         print("버튼 초기 상태가 설정되지 않았습니다.")
         return False
 
-    cap = cv2.VideoCapture(video_source)
-    if not cap.isOpened():
-        print("동영상을 열 수 없습니다.")
-        return False
+    # 초기 상태 설정
+    previous_state = "VISIBLE"  # 처음에는 버튼이 보이는 상태
+    current_state = "VISIBLE"
+
+    consecutive_hidden_count = 0  # 버튼이 가려진 상태가 연속적으로 몇 프레임 유지되는지 카운트
+    consecutive_visible_count = 0  # 버튼이 보이는 상태가 연속적으로 몇 프레임 유지되는지 카운트
+    threshold_count = 10  # 상태 전이를 결정하는데 필요한 연속 프레임 수
+    cooldown_period = 2  # 버튼 상태가 변경된 후 유지되는 시간 (초)
+
+    last_state_change_time = time.time()  # 마지막으로 상태가 변경된 시간 기록
 
     while True:
-        ret, frame = cap.read()
+        ret, frame = video.read()
         if not ret:
             break
 
-        # 현재 버튼 영역 추출
-        x, y, w, h = button_rect
-        button_region = frame[y:y + h, x:x + w]
+        # 버튼 영역 추출
+        x, y, w, h = button_coordinates
+        current_button_region = frame[y:y + h, x:x + w]
 
-        # SSIM 계산
-        now_button_state = cv2.cvtColor(button_region, cv2.COLOR_BGR2GRAY)
-        initial_gray = cv2.cvtColor(initial_button_state, cv2.COLOR_BGR2GRAY)
-        similarity, _ = compare_ssim(initial_gray, now_button_state, full=True)
-        if similarity < threshold:
-            cap.release()
-            return True
+        # 버튼 상태 비교 (SSIM 이용)
+        current_gray = cv2.cvtColor(current_button_region, cv2.COLOR_BGR2GRAY)
+        initial_gray = cv2.cvtColor(initial_button_image, cv2.COLOR_BGR2GRAY)
+        similarity, _ = compare_ssim(initial_gray, current_gray, full=True)
 
-        # 버튼 영역 계속 출력
-        cv2.imshow('Button View', button_region)
+        # 상태 판단 (임계값 기준)
+        if similarity < 0.5:
+            current_state = "HIDDEN"
+            consecutive_hidden_count += 1
+        else:
+            current_state = "VISIBLE"
+            consecutive_visible_count += 1
 
-        # ESC 키로 종료
-        if cv2.waitKey(1) == 27:
+        # 상태 전이 감지 (연속적인 상태 변화 확인)
+        current_time = time.time()
+        if previous_state == "VISIBLE" and consecutive_hidden_count >= threshold_count:
+            if current_time - last_state_change_time > cooldown_period:
+                print("턴 변화 감지: 버튼이 가려졌습니다.")
+                initial_button_image = current_button_region  # 새로운 상태를 초기 상태로 갱신
+                previous_state = "HIDDEN"
+                last_state_change_time = current_time
+                consecutive_hidden_count = 0
+
+        elif previous_state == "HIDDEN" and consecutive_visible_count >= threshold_count:
+            if current_time - last_state_change_time > cooldown_period:
+                print("버튼이 다시 보입니다.")
+                previous_state = "VISIBLE"
+                last_state_change_time = current_time
+                consecutive_visible_count = 0
+
+        # 버튼 영역 표시
+        cv2.imshow('Button View', current_button_region)
+        if cv2.waitKey(1) == 27:  # ESC 키로 종료
             break
 
-    cap.release()
+    video.release()
     cv2.destroyAllWindows()
     return False
 
 
-def turn_based_game(video_source=0, output_size=300, threshold=0.9):
+def turn_based_game(video):
     """
-    동영상 입력에서 보드와 버튼 설정 후 턴 감지. 
-    보드와 버튼의 실시간 상태를 계속 출력.
-
-    Parameters:
-    - video_source: 동영상 소스.
-    - output_size: 보드 크기.
-    - threshold: SSIM 유사도 임계값.
-
-    Returns:
-    - bool: 턴이 넘어갔는지 여부.
+    턴 기반 게임 흐름을 처리하는 함수.
     """
-    global initial_button_state, button_rect, pers_mat
+    setup_board_and_button(video)  # 체스판과 버튼 영역 설정
+    print("초기 설정 완료. 버튼 변화를 감지합니다.")
+    return detect_turn_change(video)  # 상태 전이 기반 턴 변화 감지
 
-    setup_board_and_button(video_source, output_size)
-    return detect_turn_change(video_source, threshold)
+
+# 프로그램 실행
+cap = cv2.VideoCapture(0)
+result = turn_based_game(cap)
 
 
-result = turn_based_game(video_source=0, output_size=300, threshold=0.9)
-if result:
-    print("턴이 넘어갔습니다!")
-else:
-    print("턴 변화가 감지되지 않았습니다.")
+
+
+
