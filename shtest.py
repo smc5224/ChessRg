@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import copy
 from skimage.metrics import structural_similarity as ssim
 
 is_move_Castling = [[0,0,0],[0,0,0]]
@@ -16,29 +17,36 @@ board_state = [
     ["WR", "WN", "WB", "WQ", "WK", "WB", "WN", "WR"]   # 흑 기물의 첫 번째 줄
 ]
 initial_button_image = None  # 초기 버튼 이미지 (비교 기준)
+change_button_image = None
 button_coordinates = None  # 버튼 영역 좌표 (x, y, width, height)
 perspective_matrix = None  # 평면 보정을 위한 변환 행렬
 progress_frame_past = None #프레임 저장할 전역변수(전)
 progress_frame_now = None #프레임 저장할 전역변수(후)
 
-mock_data = [
-                    {
-                        'board status': [["BR", "BN", "BB", "BQ", "BK", "BB", "BN", "BR"],
-                                         ["BP", "BP", "BP", "BP", "BP", "BP", "BP", "BP"],
-                                         [None, None, None, None, None, None, None, None], 
-                                         [None, None, None, None, None, None, None, None],
-                                         [None, None, None, None, None, None, None, None],
-                                         [None, None, None, None, None, None, None, None],
-                                         ["WP", "WP", "WP", "WP", "WP", "WP", "WP", "WP"],
-                                         ["WR", "WN", "WB", "WQ", "WK", "WB", "WN", "WR"]],
-                        'notation': 'Initial Position',
-                    }
-                ]
+mock_data = {
+    'board status': [["BR", "BN", "BB", "BQ", "BK", "BB", "BN", "BR"],
+                    ["BP", "BP", "BP", "BP", "BP", "BP", "BP", "BP"],
+                    [None, None, None, None, None, None, None, None], 
+                    [None, None, None, None, None, None, None, None],
+                    [None, None, None, None, None, None, None, None],
+                    [None, None, None, None, None, None, None, None],
+                    ["WP", "WP", "WP", "WP", "WP", "WP", "WP", "WP"],
+                    ["WR", "WN", "WB", "WQ", "WK", "WB", "WN", "WR"]],
+    'notation': 'Initial Position',
+}
+                
 
-data = []
-data.append(mock_data)
-
-
+data = [{
+    'board status': [["BR", "BN", "BB", "BQ", "BK", "BB", "BN", "BR"],
+                    ["BP", "BP", "BP", "BP", "BP", "BP", "BP", "BP"],
+                    [None, None, None, None, None, None, None, None], 
+                    [None, None, None, None, None, None, None, None],
+                    [None, None, None, None, None, None, None, None],
+                    [None, None, None, None, None, None, None, None],
+                    ["WP", "WP", "WP", "WP", "WP", "WP", "WP", "WP"],
+                    ["WR", "WN", "WB", "WQ", "WK", "WB", "WN", "WR"]],
+    'notation': 'Initial Position',
+}]
 
 def setup_board_and_button(video):
     """
@@ -133,32 +141,95 @@ def setup_board_and_button(video):
 
     original_frame = frame.copy()
 
+    # 축소 비율 설정
+    scale_factor = 0.5  # 화면 크기를 50%로 줄임
+    frame_width = int(frame.shape[1] * scale_factor)
+    frame_height = int(frame.shape[0] * scale_factor)
+    resized_size = (frame_width, frame_height)
+
+    def on_mouse(event, x, y, flags, param):
+        """
+        마우스 이벤트 처리 콜백 함수.
+        """
+        nonlocal is_dragging, is_resizing, start_drag_point, button_rect, selected_point_count, selected_points
+        global perspective_matrix
+
+        # 마우스 좌표를 원본 크기 기준으로 변환
+        scaled_x = x / scale_factor
+        scaled_y = y / scale_factor
+
+        if perspective_matrix is None and selected_point_count < 4:  # 평면 보정을 위한 점 선택
+            if event == cv2.EVENT_LBUTTONDOWN:
+                # 변환된 좌표를 사용하여 점을 저장
+                selected_points[selected_point_count] = [scaled_x, scaled_y]
+                selected_point_count += 1
+                if selected_point_count == 4:  # 점 4개가 선택되면 평면 보정 수행
+                    destination_points = np.array([
+                        [0, 0],
+                        [300, 0],
+                        [300, 300],
+                        [0, 300]
+                    ], dtype=np.float32)
+                    perspective_matrix = cv2.getPerspectiveTransform(selected_points, destination_points)
+
+        elif perspective_matrix is not None:  # 버튼 영역 조정 (평면 보정 후)
+            if event == cv2.EVENT_LBUTTONDOWN:  # 마우스 클릭
+                if is_in_corner(int(scaled_x), int(scaled_y), button_rect):  # 모서리를 클릭한 경우
+                    is_resizing = True
+                    start_drag_point = (scaled_x, scaled_y)
+                elif (button_rect[0] <= scaled_x <= button_rect[0] + button_rect[2] and
+                    button_rect[1] <= scaled_y <= button_rect[1] + button_rect[3]):  # 버튼 내부 클릭
+                    is_dragging = True
+                    start_drag_point = (scaled_x, scaled_y)
+
+            elif event == cv2.EVENT_MOUSEMOVE:  # 마우스 이동
+                if is_dragging:  # 버튼 이동
+                    dx, dy = scaled_x - start_drag_point[0], scaled_y - start_drag_point[1]
+                    button_rect[0] += dx
+                    button_rect[1] += dy
+                    start_drag_point = (scaled_x, scaled_y)
+                elif is_resizing:  # 버튼 크기 조정
+                    dx, dy = scaled_x - start_drag_point[0], scaled_y - start_drag_point[1]
+                    button_rect[2] += dx
+                    button_rect[3] += dy
+                    button_rect[2] = max(20, button_rect[2])  # 최소 너비 제한
+                    button_rect[3] = max(20, button_rect[3])  # 최소 높이 제한
+                    start_drag_point = (scaled_x, scaled_y)
+
+            elif event == cv2.EVENT_LBUTTONUP:  # 마우스 버튼 해제
+                is_dragging = False
+                is_resizing = False
+
+    # 마우스 콜백 설정
+    cv2.namedWindow('Video')
+    cv2.setMouseCallback('Video', on_mouse)
+
     while True:
         if not ret:
             break
 
         # 이전 프레임을 복원 (사각형 그리기 전)
-        frame = original_frame.copy()
+        frame = cv2.resize(original_frame, resized_size)
 
-        # 점 찍기 표시
+        # 점 찍기 표시 (좌표를 축소 비율에 맞게 변환)
         for i in range(selected_point_count):
-            cv2.circle(frame, (int(selected_points[i, 0]), int(selected_points[i, 1])), 5, (0, 0, 255), -1)
+            scaled_x = int(selected_points[i, 0] * scale_factor)
+            scaled_y = int(selected_points[i, 1] * scale_factor)
+            cv2.circle(frame, (scaled_x, scaled_y), 5, (0, 0, 255), -1)
 
         if perspective_matrix is not None:  # 평면 보정 후
-            warped_frame = cv2.warpPerspective(frame, perspective_matrix, (300, 300))
+            warped_frame = cv2.warpPerspective(original_frame, perspective_matrix, (300, 300))
             progress_frame_past = warped_frame
             cv2.imshow('Board View', warped_frame)  # 보정된 체스판 출력
-            draw_rectangle(frame, button_rect)
-        # 사각형을 그린다 (사각형을 그리기 전에 원래 이미지로 복원된 상태에서 그리기)
-        
+            draw_rectangle(frame, [int(coord * scale_factor) for coord in button_rect])
 
         # 원본 영상 출력
         cv2.imshow('Video', frame)
-        
+
         key = cv2.waitKey(1)
         if key == 13 and perspective_matrix is not None:  # Enter 키로 버튼 영역 설정 완료
             x, y, w, h = button_rect
-            initial_button_image = frame[y:y + h, x:x + w]  # 버튼 초기 이미지 저장
+            initial_button_image = original_frame[int(y):int(y + h), int(x):int(x + w)]  # 버튼 초기 이미지 저장
             button_coordinates = button_rect
             break
         elif key == 27:  # ESC 키로 종료
@@ -168,75 +239,82 @@ def setup_board_and_button(video):
 
 
 def detect_turn_change(video):
+
     """
-    버튼 상태 변화(턴 변경)를 감지하는 함수.
-    상태 전이 로직을 활용하여 턴 변경을 감지.
+    버튼 상태 변화(턴 변경)를 감지하는 함수 (프레임 스킵 적용).
     """
     global initial_button_image, button_coordinates, turn_count_button
 
     if initial_button_image is None or button_coordinates is None:
         print("버튼 초기 상태가 설정되지 않았습니다.")
-        return False
+        return False, None
 
     # 초기 상태 설정
-    previous_state = "VISIBLE"  # 처음에는 버튼이 보이는 상태
-    current_state = "VISIBLE"
-
-    consecutive_hidden_count = 0  # 버튼이 가려진 상태가 연속적으로 몇 프레임 유지되는지 카운트
-    consecutive_visible_count = 0  # 버튼이 보이는 상태가 연속적으로 몇 프레임 유지되는지 카운트
-    threshold_count = 12  # 상태 전이를 결정하는데 필요한 연속 프레임 수 (중간 값으로 조정)
-    delay_after_transition = 5  # 전이 후 몇 프레임 동안 상태를 확인하지 않을 지연 프레임 수
-    delay_counter = 0
-
+    hidden_detected = False  # 숨김 상태 감지 플래그
+    consecutive_hidden_count = 0
+    consecutive_visible_count = 0
+    threshold_count = 5  # 연속 변화 임계값 조정
+    similarity_threshold = 0.5  # 유사도 임계값 조정
+    frame_skip_interval = 1  # 프레임 스킵 간격
+    frame_counter = 0
     while True:
         ret, frame = video.read()
         if not ret:
             break
 
-        # 지연 카운터가 0보다 크면 상태 검사를 잠시 생략
-        if delay_counter > 0:
-            delay_counter -= 1
+        # 프레임 스킵: frame_counter가 interval에 맞지 않을 경우 건너뜀
+        frame_counter += 1
+        if frame_counter % frame_skip_interval != 0:
             continue
 
         # 버튼 영역 추출
         x, y, w, h = button_coordinates
+        x, y, w, h = int(x), int(y), int(w), int(h)
         current_button_region = frame[y:y + h, x:x + w]
 
-        # 버튼 상태 비교 (SSIM 이용)
+        # 그레이스케일 변환 및 블러 적용
         current_gray = cv2.cvtColor(current_button_region, cv2.COLOR_BGR2GRAY)
-        initial_gray = cv2.cvtColor(initial_button_image, cv2.COLOR_BGR2GRAY)
-        similarity, _ = ssim(initial_gray, current_gray, full=True)
-        # 상태 판단 (임계값 기준)
-        if similarity < 0.5:  # 임계값을 0.85로 설정하여 더 민감하게 반응
-            current_state = "HIDDEN"
+        #current_gray = cv2.GaussianBlur(current_gray, (5, 5), 0)
+
+        # 비교 대상 이미지 처리
+        reference_gray = cv2.cvtColor(initial_button_image, cv2.COLOR_BGR2GRAY)
+        #reference_gray = cv2.GaussianBlur(reference_gray, (5, 5), 0)
+
+        # SSIM 계산
+        similarity = ssim(reference_gray, current_gray)
+
+        # 상태 판단
+        if similarity < similarity_threshold:
             consecutive_hidden_count += 1
-            consecutive_visible_count = 0  # 보이는 상태 카운터 초기화
+            consecutive_visible_count = 0
         else:
-            current_state = "VISIBLE"
             consecutive_visible_count += 1
-            consecutive_hidden_count = 0  # 가려진 상태 카운터 초기화
-
-        # 상태 전이 감지 (연속적인 상태 변화 확인)
-        if previous_state == "VISIBLE" and consecutive_hidden_count >= threshold_count:
-            turn_count_button += 1  # 전역 변수로 턴 증
-            previous_state = "HIDDEN"
             consecutive_hidden_count = 0
-            consecutive_visible_count = 0  # 상태 변경 후 초기화
-            delay_counter = delay_after_transition  # 상태 전이 후 지연 프레임 설정
 
-            # 턴이 바뀌면 True 반환하고 루프 종료
+        # 상태 전이 로직
+        if not hidden_detected and consecutive_hidden_count >= threshold_count:
+            # 숨김 상태로 전이
+            hidden_detected = True
+            consecutive_hidden_count = 0
+
+        if hidden_detected and consecutive_visible_count >= threshold_count:
+            # VISIBLE 상태로 복귀, 턴 변경 감지
+            turn_count_button += 1
+            hidden_detected = False
+            consecutive_visible_count = 0
+            initial_button_image = current_button_region.copy()
             return True, frame
 
-        elif previous_state == "HIDDEN" and consecutive_visible_count >= threshold_count:
-            previous_state = "VISIBLE"
-            consecutive_visible_count = 0
-            consecutive_hidden_count = 0  # 상태 변경 후 초기화
-            delay_counter = delay_after_transition  # 상태 전이 후 지연 프레임 설정
+        # 디버깅 정보 출력 (필요에 따라 주석 처리)
+        #print(f"Frame: {frame_counter}, Similarity: {similarity:.2f}, Hidden Count: {consecutive_hidden_count}, Visible Count: {consecutive_visible_count}")
 
-        # 버튼 영역 표시
+        # 버튼 영역 시각화
         cv2.imshow('Button View', current_button_region)
         if cv2.waitKey(1) == 27:  # ESC 키로 종료
             break
+
+    return False, None
+
 
 
 def process_frame(frame):
@@ -253,68 +331,6 @@ def process_frame(frame):
         progress_frame_now = cv2.warpPerspective(frame, perspective_matrix, (300, 300))
     cv2.imshow('now',progress_frame_now)   
     
-
-""" 보드 자르는함수(큰사각형으로)
-# 사진을 체스판으로 자르기
-def detect_and_crop_chessboard(image_path):
-    # 이미지 불러오기
-    image = cv2.imread(image_path)
-    if image is None:
-        print("이미지를 불러올 수 없습니다. 경로를 확인하세요.")
-        return None
-
-    # 이미지를 그레이스케일로 변환
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # 블러를 적용해 노이즈 줄이기
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # 에지 검출 (Canny Edge Detection)
-    edges = cv2.Canny(blurred, 50, 150)
-
-    # 윤곽선 찾기
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # 가장 큰 사각형 윤곽선을 찾기 (체스판을 가정)
-    max_contour = max(contours, key=cv2.contourArea)
-
-    # 체스판 윤곽선을 사각형으로 근사화
-    epsilon = 0.02 * cv2.arcLength(max_contour, True)
-    approx = cv2.approxPolyDP(max_contour, epsilon, True)
-
-    if len(approx) == 4:  # 사각형인지 확인
-        # 사각형의 네 점을 얻어서 정렬
-        pts = approx.reshape(4, 2)
-        rect = np.zeros((4, 2), dtype="float32")
-
-        # 점을 위쪽 좌우, 아래쪽 좌우 순으로 정렬
-        s = pts.sum(axis=1)
-        rect[0] = pts[np.argmin(s)]
-        rect[2] = pts[np.argmax(s)]
-
-        diff = np.diff(pts, axis=1)
-        rect[1] = pts[np.argmin(diff)]
-        rect[3] = pts[np.argmax(diff)]
-
-        # 체스판을 정사각형으로 변환 (워핑)
-        (tl, tr, br, bl) = rect
-        maxWidth = int(max(np.linalg.norm(br - bl), np.linalg.norm(tr - tl)))
-        maxHeight = int(max(np.linalg.norm(tr - br), np.linalg.norm(tl - bl)))
-
-        dst = np.array([
-            [0, 0],
-            [maxWidth - 1, 0],
-            [maxWidth - 1, maxHeight - 1],
-            [0, maxHeight - 1]], dtype="float32")
-
-        M = cv2.getPerspectiveTransform(rect, dst)
-        cropped_chessboard = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
-
-        # 체스판만 잘라낸 이미지 반환
-        return cropped_chessboard
-    else:
-        print("체스판을 인식하지 못했습니다.")
-        return None """
 
 
 def split_chessboard(image):    # 체스판을 8x8로 자르고 리스트로 만들기 ( (i, j) i는 세로축, j는 가로축 / 왼쪽 위부터 0 )
@@ -340,7 +356,6 @@ def compare_cells(cell1, cell2):
     # Grayscale로 변환
     cell1_gray = cv2.cvtColor(cell1, cv2.COLOR_BGR2GRAY)
     cell2_gray = cv2.cvtColor(cell2, cv2.COLOR_BGR2GRAY)
-
     # 구조적 유사도 계산
     score, _ = ssim(cell1_gray, cell2_gray, full=True)
     return score
@@ -355,14 +370,15 @@ def detect_moves(initial_image, new_image):
     initial_board = split_chessboard(initial_image)
     new_board = split_chessboard(new_image)
     moves = []
-
+    minM = []
     for i in range(8):
         for j in range(8):
             similarity = compare_cells(initial_board[i][j], new_board[i][j])
-
+            minM.append(similarity)
             # SSIM이 0.9 이하이면 말의 이동이 있다고 간주
-            if similarity < 0.9:
+            if similarity < 0.7:
                 moves.append((i, j))  # 이동된 위치 저장
+    #print(min(minM))
 
     # 이동이 발생한 칸을 분석하여 어느 칸에서 어느 칸으로 이동했는지 판단
     if len(moves) == 2:
@@ -382,9 +398,9 @@ def detect_moves(initial_image, new_image):
                     print(f"{piece_A}가 {Acell}에서 {Bcell}로 이동했습니다.")
                     board_state[Acell[0]][Acell[1]] = None  # A 위치를 빈칸으로
                     board_state[Bcell[0]][Bcell[1]] = piece_A  # B 위치로 이동
-                    mock_data['board status'] = board_state
+                    mock_data['board status'] = copy.deepcopy(board_state)
                     mock_data['notation'] = notation_transformation(piece_A, Acell, Bcell)
-                    data.append(mock_data)
+                    data.append(copy.copy(mock_data))
 
             else : 
                 print(f"규칙오류 : {piece_A}가 {Acell}에서 {Bcell}로 이동할 수 없습니다.")
@@ -400,9 +416,9 @@ def detect_moves(initial_image, new_image):
                     print(f"{piece_B}가 {Bcell}에서 {Acell}로 이동했습니다.")
                     board_state[Bcell[0]][Bcell[1]] = None  # B 위치를 빈칸으로
                     board_state[Acell[0]][Acell[1]] = piece_B  # A 위치로 이동
-                    mock_data['board status'] = board_state
+                    mock_data['board status'] = copy.deepcopy(board_state)
                     mock_data['notation'] = notation_transformation(piece_B, Bcell, Acell)
-                    data.append(mock_data)
+                    data.append(copy.copy(mock_data))
             else : 
                 print(f"규칙오류 : {piece_B}가 {Bcell}에서 {Acell}로 이동할 수 없습니다.")
                 turn_count-=1
@@ -456,14 +472,14 @@ def detect_moves(initial_image, new_image):
                     board_state[startCell[0]][startCell[1]] = None  # A 위치를 빈칸으로  
                     if turn_count % 2 != 0:  # 홀수 턴이면 백이 흑을 잡음
                         print(f"백의 {start_piece}가 {endCell}에서 흑의 {end_piece}를 잡았습니다.")
-                        mock_data['board status'] = board_state
+                        mock_data['board status'] = copy.deepcopy(board_state)
                         mock_data['notation'] = notation_transformation(start_piece, startCell, endCell,is_move_kill=True, captured_piece=end_piece)
-                        data.append(mock_data)
+                        data.append(copy.copy(mock_data))
                     else:  # 짝수 턴이면 흑이 백을 잡음
                         print(f"흑의 {start_piece}가 {endCell}에서 백의 {end_piece}를 잡았습니다.")
-                        mock_data['board status'] = board_state
+                        mock_data['board status'] = copy.deepcopy(board_state)
                         mock_data['notation'] = notation_transformation(start_piece, startCell, endCell,is_move_kill=True, captured_piece=end_piece)
-                        data.append(mock_data)
+                        data.append(copy.copy(mock_data))
                     
 
             else :
@@ -521,7 +537,7 @@ def detect_moves(initial_image, new_image):
 
     else:
         print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
-        print("%d",len(moves))
+        print(len(moves))
 
 
 def perform_castling(castling_type, move_set):
@@ -534,9 +550,9 @@ def perform_castling(castling_type, move_set):
             if is_valid_move("WK", (7,4), (7,2)):
                 board_state[7][4], board_state[7][2] = None, "WK"
                 board_state[7][0], board_state[7][3] = None, "WR"
-                mock_data['board status'] = board_state
+                mock_data['board status'] = copy.deepcopy(board_state)
                 mock_data['notation'] = notation_transformation('WK', (7,4), (7,2), is_move_Castling==True)
-                data.append(mock_data)
+                data.append(copy.copy(mock_data))
                 turn_count += 1  # 캐슬링 후 턴 증가
             else: 
                 print("규칙오류 : 캐슬링이 불가능합니다.")
@@ -545,9 +561,9 @@ def perform_castling(castling_type, move_set):
             if is_valid_move("BK", (0,4), (0,2)):
                 board_state[0][4], board_state[0][2] = None, "BK"
                 board_state[0][0], board_state[0][3] = None, "BR"
-                mock_data['board status'] = board_state
+                mock_data['board status'] = copy.deepcopy(board_state)
                 mock_data['notation'] = notation_transformation('BK', (0,4), (0,2), is_move_Castling==True)
-                data.append(mock_data)
+                data.append(copy.copy(mock_data))
                 turn_count += 1  # 캐슬링 후 턴 증가
             else: 
                 print("규칙오류 : 캐슬링이 불가능합니다.")
@@ -557,9 +573,9 @@ def perform_castling(castling_type, move_set):
             if is_valid_move("WK", (7,4), (7,6)):
                 board_state[7][4], board_state[7][6] = None, "WK"
                 board_state[7][7], board_state[7][5] = None, "WR"
-                mock_data['board status'] = board_state
+                mock_data['board status'] = copy.deepcopy(board_state)
                 mock_data['notation'] = notation_transformation('WK', (7,4), (7,6), is_move_Castling==True)
-                data.append(mock_data)
+                data.append(copy.copy(mock_data))
                 turn_count += 1  # 캐슬링 후 턴 증가
             else: 
                 print("규칙오류 : 캐슬링이 불가능합니다.")
@@ -568,9 +584,9 @@ def perform_castling(castling_type, move_set):
             if is_valid_move("BK", (0,4), (0,6)):
                 board_state[0][4], board_state[0][6] = None, "BK"
                 board_state[0][7], board_state[0][5] = None, "BR"
-                mock_data['board status'] = board_state
+                mock_data['board status'] = copy.deepcopy(board_state)
                 mock_data['notation'] = notation_transformation('BK', (0,4), (0,6), is_move_Castling==True)
-                data.append(mock_data)
+                data.append(copy.copy(mock_data))
                 turn_count += 1  # 캐슬링 후 턴 증가
             else: 
                 print("규칙오류 : 캐슬링이 불가능합니다.")
@@ -604,11 +620,11 @@ def perform_En_passant(En_passant_type, En_passant_target):
             board_state[move_row][move_col] = "WP"
             # 흑 폰 제거
             board_state[target_row][target_col] = None
-            mock_data['board status'] = board_state
+            mock_data['board status'] = copy.deepcopy(board_state)
             start_cell = (target_row,target_col - 1)
             end_cell = (move_row,move_col)
             mock_data['notation'] = notation_transformation("WP", start_cell, end_cell,is_move_kill=True, is_move_en_passant=True, captured_piece='BP'  )
-            data.append(mock_data)
+            data.append(copy.copy(mock_data))
             
 
     elif En_passant_type == "angRW":  # 백 폰이 왼쪽 대각선으로 이동
@@ -623,7 +639,7 @@ def perform_En_passant(En_passant_type, En_passant_target):
             start_cell = (target_row,target_col + 1)
             end_cell = (move_row,move_col)
             mock_data['notation'] = notation_transformation("WP", start_cell, end_cell,is_move_kill=True, is_move_en_passant=True, captured_piece='BP')
-            data.append(mock_data)
+            data.append(copy.copy(mock_data))
 
     elif En_passant_type == "angLB":  # 흑 폰이 오른쪽 대각선으로 이동
         # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
@@ -637,7 +653,7 @@ def perform_En_passant(En_passant_type, En_passant_target):
             start_cell = (target_row,target_col - 1)
             end_cell = (move_row,move_col)
             mock_data['notation'] = notation_transformation("BP", start_cell, end_cell,is_move_kill=True, is_move_en_passant=True, captured_piece='WP')
-            data.append(mock_data)
+            data.append(copy.copy(mock_data))
     elif En_passant_type == "angRB":  # 흑 폰이 왼쪽 대각선으로 이동
         # 흑 폰이 앙파상으로 이동하는 위치는 잡히는 폰의 아래 칸
         move_row, move_col = target_row + 1, target_col
@@ -650,7 +666,7 @@ def perform_En_passant(En_passant_type, En_passant_target):
             start_cell = (target_row,target_col + 1)
             end_cell = (move_row,move_col)
             mock_data['notation'] = notation_transformation("BP", start_cell, end_cell,is_move_kill=True, is_move_en_passant=True, captured_piece='WP')
-            data.append(mock_data)
+            data.append(copy.copy(mock_data))
     else:
         print("Invalid En Passant type!")
 
@@ -821,9 +837,10 @@ def video_play(video):
     global initial_button_image, button_coordinates, turn_count_button, progress_frame_past, progress_frame_now, data
     
     setup_board_and_button(video)
-    
+    a = 0
     while True:
         turnchange, frame = detect_turn_change(video)
+        a+=1
         if turnchange:
             process_frame(frame)
             is_game_end = detect_moves(progress_frame_past,progress_frame_now)
@@ -832,6 +849,8 @@ def video_play(video):
             elif is_game_end =='B':
                 break
     return data
+
+
 def notation_transformation(
     piece,
     startcell,
@@ -893,7 +912,9 @@ def notation_transformation(
 
     return move_notation
 
-
+cap = cv2.VideoCapture('video\\tes3.mp4')
+video_play(cap)
+cap.release()
 
 
 
