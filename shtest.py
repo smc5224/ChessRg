@@ -349,9 +349,10 @@ def split_chessboard(image):    # 체스판을 8x8로 자르고 리스트로 만
             row.append(cell)
         cells.append(row)
 
-    return cells
-# 
+    return cells 
 
+#simm썻을때 compare_cells
+"""
 def compare_cells(cell1, cell2):
     # Grayscale로 변환
     cell1_gray = cv2.cvtColor(cell1, cv2.COLOR_BGR2GRAY)
@@ -359,6 +360,49 @@ def compare_cells(cell1, cell2):
     # 구조적 유사도 계산
     score, _ = ssim(cell1_gray, cell2_gray, full=True)
     return score
+"""
+
+
+def compare_cells_hsv(cell1, cell2):
+    """
+    두 셀의 HSV 색상 기반 히스토그램 비교
+    """
+    # HSV 변환
+    cell1_hsv = cv2.cvtColor(cell1, cv2.COLOR_BGR2HSV)
+    cell2_hsv = cv2.cvtColor(cell2, cv2.COLOR_BGR2HSV)
+
+    # Hue와 Saturation만 비교
+    hist1 = cv2.calcHist([cell1_hsv], [0, 1], None, [50, 60], [0, 180, 0, 256])
+    hist2 = cv2.calcHist([cell2_hsv], [0, 1], None, [50, 60], [0, 180, 0, 256])
+
+    # 정규화
+    hist1 = cv2.normalize(hist1, hist1).flatten()
+    hist2 = cv2.normalize(hist2, hist2).flatten()
+
+    # 히스토그램 비교 (상관계수 방식)
+    similarity = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
+    return similarity
+
+
+def detect_moves_hsv(initial_image, new_image):
+    """
+    체스판에서 HSV 기반 셀 비교로 말 이동 감지
+    """
+    # 체스판을 8x8 셀로 나누기
+    initial_board = split_chessboard(initial_image)  # 8x8 배열
+    new_board = split_chessboard(new_image)  # 8x8 배열
+
+    moves = []  # 이동된 셀 저장
+
+    for i in range(8):
+        for j in range(8):
+            # 두 셀 비교
+            similarity = compare_cells_hsv(initial_board[i][j], new_board[i][j])
+            if similarity < 0.85:  # 임계값 설정 (0.85 이하이면 변화 감지)
+                moves.append((i, j))  # 이동된 셀 좌표 저장
+
+    return moves
+
 
 
 def detect_moves(initial_image, new_image):
@@ -373,7 +417,7 @@ def detect_moves(initial_image, new_image):
     minM = []
     for i in range(8):
         for j in range(8):
-            similarity = compare_cells(initial_board[i][j], new_board[i][j])
+            similarity = compare_cells_hsv(initial_board[i][j], new_board[i][j])
             minM.append(similarity)
             # SSIM이 0.9 이하이면 말의 이동이 있다고 간주
             if similarity < 0.7:
@@ -538,6 +582,7 @@ def detect_moves(initial_image, new_image):
     else:
         print("이동을 감지하지 못했습니다. 또는 복수의 이동이 감지되었습니다.")
         print(len(moves))
+
 
 
 def perform_castling(castling_type, move_set):
