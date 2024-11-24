@@ -818,7 +818,7 @@ def is_valid_move(piece, start, end):
 
 def video_play(video):
 
-    global initial_button_image, button_coordinates, turn_count_button, progress_frame_past, progress_frame_now
+    global initial_button_image, button_coordinates, turn_count_button, progress_frame_past, progress_frame_now, data
     
     setup_board_and_button(video)
     
@@ -831,7 +831,7 @@ def video_play(video):
                 break
             elif is_game_end =='B':
                 break
-
+    return data
 def notation_transformation(
     piece,
     startcell,
@@ -894,9 +894,6 @@ def notation_transformation(
     return move_notation
 
 
-cap = cv2.VideoCapture('video/tes3.mp4')
 
-
-video_play(cap)
 
 
